@@ -16,16 +16,13 @@ Docker container version management and monitoring dashboard for home labs.
 
 ## Installation
 
-### Ubuntu/Debian
+### Linux
 ```bash
-# Install system dependencies
+# Install dependencies
 sudo apt update
 sudo apt install python3-pip python3-venv docker.io
 
-# Optional: Install PostgreSQL locally (or use Docker)
-sudo apt install postgresql
-
-# Clone and setup project
+# Setup project
 git clone <your-repo-url>
 cd homelab-manager
 python3 -m venv venv
@@ -48,7 +45,7 @@ pip install -e ".[dev,dashboard]"
 
 ### Windows
 ```bash
-# Prerequisites:
+# Install dependencies
 # - Install Python 3.10+ from python.org
 # - Install Docker Desktop
 
@@ -71,6 +68,20 @@ docker run -d \
   -e POSTGRES_PASSWORD=homelab \
   -p 5432:5432 \
   postgres:16
+```
+
+## Config
+
+Copy `.env.example` to `.env` and customize:
+```bash
+cp .env.example .env
+```
+
+Example `.env`:
+```bash
+DATABASE_URL=postgresql://homelab:homelab@localhost/homelab
+DOCKER_HOST=unix:///var/run/docker.sock
+DASHBOARD_PORT=8050
 ```
 
 ## Usage
@@ -98,32 +109,5 @@ homelab rollback <container_name> <version>
 # Start the web dashboard
 python -m homelab.dashboard.app
 
-# http://localhost:8050
-```
-
-## Configuration
-
-Copy `.env.example` to `.env` and customize:
-```bash
-cp .env.example .env
-```
-
-Example `.env`:
-```bash
-DATABASE_URL=postgresql://homelab:homelab@localhost/homelab
-DOCKER_HOST=unix:///var/run/docker.sock
-DASHBOARD_PORT=8050
-```
-
-## Development
-
-```bash
-# Run tests
-pytest
-
-# Format code
-black src/
-
-# Lint
-ruff check src/
+# Visit: http://localhost:8050
 ```
