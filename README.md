@@ -51,7 +51,7 @@ Copy `.env.example` to `.env` and customize:
 cp .env.example .env
 ```
 
-Initialize Database
+Initialize database:
 
 ```bash
 homelab init-db
