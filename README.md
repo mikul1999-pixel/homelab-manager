@@ -5,6 +5,7 @@ Docker container version management and monitoring dashboard for home labs.
 ## Features
 - Version tracking and history
 - One-click rollbacks
+- Docker compose syncs (optional)
 - Health monitoring dashboards
 - Config drift detection
 - Dependency management
@@ -16,59 +17,31 @@ Docker container version management and monitoring dashboard for home labs.
 
 ## Installation
 
-### Linux
+
 ```bash
 # Install dependencies
 sudo apt update
 sudo apt install python3-pip python3-venv docker.io
 
 # Setup project
-git clone <your-repo-url>
+git clone https://github.com/mikul1999-pixel/homelab-manager.git
 cd homelab-manager
 python3 -m venv venv
 source venv/bin/activate
 pip install -e ".[dev,dashboard]"
 ```
 
-### macOS
-```bash
-# Install dependencies
-brew install python docker postgresql
-
-# Setup project
-git clone <your-repo-url>
-cd homelab-manager
-python3 -m venv venv
-source venv/bin/activate
-pip install -e ".[dev,dashboard]"
-```
-
-### Windows
-```bash
-# Install dependencies
-# - Install Python 3.10+ from python.org
-# - Install Docker Desktop
-
-# Setup project
-git clone <your-repo-url>
-cd homelab-manager
-python -m venv venv
-venv\Scripts\activate
-pip install -e ".[dev,dashboard]"
-```
 
 ### Database Setup
 
 **PostgreSQL via Docker**
 ```bash
-docker run -d \
-  --name homelab-postgres \
-  -e POSTGRES_DB=homelab \
-  -e POSTGRES_USER=homelab \
-  -e POSTGRES_PASSWORD=homelab \
-  -p 5432:5432 \
-  postgres:16
+cd homelab-manager
+docker-compose up -d
 ```
+
+This starts PostgreSQL using the included `docker-compose.yml`. <br>
+You can also use your own PostgreSQL, just update `.env`
 
 ## Config
 
@@ -77,37 +50,103 @@ Copy `.env.example` to `.env` and customize:
 cp .env.example .env
 ```
 
-Example `.env`:
+Initialize Database
+
 ```bash
-DATABASE_URL=postgresql://homelab:homelab@localhost/homelab
-DOCKER_HOST=unix:///var/run/docker.sock
-DASHBOARD_PORT=8050
+homelab init-db
 ```
 
 ## Usage
 
 ### CLI Commands
+
+#### Container Management
 ```bash
 # List all containers
 homelab list
 
-# Show container details
+# Show detailed container information
 homelab details <container_name>
+```
 
-# Create snapshot of container state
+#### Version Control
+```bash
+# Create snapshot of current state
 homelab snapshot <container_name>
 
 # View version history
 homelab history <container_name>
 
-# Rollback to previous version
-homelab rollback <container_name> <version>
+# Rollback to specific snapshot
+homelab rollback <container_name> <snapshot_id>
+
+# Rollback without confirmation
+homelab rollback <container_name> <snapshot_id> --force
 ```
 
-### Dashboard
+#### Compose Integration (Optional)
+```bash
+# Enable compose sync (one-time setup)
+homelab enable-compose <container_name>
+
+# Verify compose setup
+homelab verify-compose <container_name>
+
+# Disable compose sync
+homelab disable-compose <container_name>
+
+# List all containers with compose sync enabled
+homelab list-compose
+```
+
+### Dashboard (Coming Soon)
 ```bash
 # Start the web dashboard
 python -m homelab.dashboard.app
 
-# Visit: http://localhost:8050
+# Visit http://localhost:8050
 ```
+
+## Docker Compose Integration
+
+Homelab Manager can optionally keep your docker-compose `.env` files in sync with rollbacks.
+
+### Setup Process
+
+**1. Enable compose sync:**
+```bash
+homelab enable-compose immich-server
+```
+
+Follow the interactive prompts. This creates an `.env.manager` file with version variables.
+
+**2. Update your compose file:**
+
+Add the `.env.manager` file to your service:
+
+```yaml
+# immich.yml
+services:
+  immich-server:
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-v1.117.0}
+    env_file:
+      - immich/.env          # Your existing config (optional)
+      - immich/.env.manager  # Managed by homelab-manager
+```
+
+**3. Verify setup:**
+```bash
+homelab verify-compose immich-server
+```
+
+### How Compose Sync Works
+
+**Without compose sync:**
+- Rollback changes the running container only
+- Your compose files are unchanged
+- Running `docker-compose up` later will revert to the compose file version
+
+**With compose sync:**
+- Rollback updates both the container AND `.env.manager`
+- Your compose files stay in sync with the running state
+- You can run `docker-compose up` anytime without conflicts
