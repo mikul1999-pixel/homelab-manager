@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import List, Dict, Optional
-from homelab.core.models import VersionHistory, Container
+from pathlib import Path
+from homelab.core.models import VersionHistory, Container, ComposeConfig
 from homelab.core.docker_manager import DockerManager
+from homelab.core.compose_manager import ComposeManager
 
 class VersionTracker:
     """Tracks container version history"""
@@ -9,6 +11,7 @@ class VersionTracker:
     def __init__(self, session):
         self.session = session
         self.docker_manager = DockerManager()
+        self.compose_manager = ComposeManager()
     
     def create_snapshot(self, container_name: str) -> VersionHistory:
         """Create a snapshot of current container state"""
@@ -38,7 +41,13 @@ class VersionTracker:
             .filter_by(id=snapshot_id)\
             .first()
     
-    def rollback_container(self, container_name: str, snapshot_id: int) -> VersionHistory:
+    def get_compose_config(self, container_name: str) -> Optional[ComposeConfig]:
+        """Get compose configuration for a container"""
+        return self.session.query(ComposeConfig)\
+            .filter_by(container_name=container_name, enabled=True)\
+            .first()
+    
+    def rollback_container(self, container_name: str, snapshot_id: int) -> Dict:
         """
         Rollback container to a specific snapshot
         """
@@ -75,7 +84,35 @@ class VersionTracker:
         self.session.add(rollback_record)
         self.session.commit()
         
-        return rollback_record
+        # Check if compose sync is enabled
+        compose_config = self.get_compose_config(container_name)
+        compose_synced = False
+        env_path = None
+        
+        if compose_config:
+            try:
+                # Update .env.manager file
+                env_path = Path(compose_config.manager_env_path)
+                version_value = self.compose_manager.extract_version_from_image(
+                    snapshot.image_version
+                )
+                
+                self.compose_manager.update_env_variable(
+                    env_path,
+                    compose_config.version_variable,
+                    version_value
+                )
+                
+                compose_synced = True
+            except Exception as e:
+                print(f"Warning: Failed to sync compose: {e}")
+        
+        return {
+            'rollback_record': rollback_record,
+            'compose_synced': compose_synced,
+            'env_path': str(env_path) if env_path else None,
+            'compose_config': compose_config
+        }
     
     def get_current_version(self, container_name: str) -> Optional[str]:
         """Get the currently running version of a container"""
