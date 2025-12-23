@@ -1,6 +1,7 @@
 # Homelab Manager
 
-Docker container version management and monitoring dashboard for home labs.
+Docker container version management and monitoring dashboard for home labs. Track versions, rollback changes, and optionally sync with docker-compose files.
+
 
 ## Features
 - Version tracking and history
@@ -99,7 +100,7 @@ homelab disable-compose <container_name>
 homelab list-compose
 ```
 
-### Dashboard (Coming Soon)
+### Dashboard
 ```bash
 # Start the web dashboard
 python -m homelab.dashboard.app
@@ -150,3 +151,10 @@ homelab verify-compose immich-server
 - Rollback updates both the container AND `.env.manager`
 - Your compose files stay in sync with the running state
 - You can run `docker-compose up` anytime without conflicts
+
+
+<br>
+
+---
+
+**Note:** This is a personal development project. Features and functionality may change.
