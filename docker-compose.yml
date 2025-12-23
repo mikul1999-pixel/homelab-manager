@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: homelab-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-homelab}
+      POSTGRES_USER: ${POSTGRES_USER:-homelab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-homelab}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-homelab}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - homelab-network
+
+  # Add dashboard here later
+  # dashboard:
+  #   build: .
+  #   container_name: homelab-dashboard
+  #   restart: unless-stopped
+  #   ports:
+  #     - "${DASHBOARD_PORT:-8050}:8050"
+  #   environment:
+  #     DATABASE_URL: postgresql://${POSTGRES_USER:-homelab}:${POSTGRES_PASSWORD:-homelab}@postgres:5432/${POSTGRES_DB:-homelab}
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   networks:
+  #     - homelab-network
+
+volumes:
+  postgres-data:
+    driver: local
+
+networks:
+  homelab-network:
+    driver: bridge

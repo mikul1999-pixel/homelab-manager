@@ -31,5 +31,54 @@ def details(container_name):
     for env in details['env_vars']:
         click.echo(f"  {env}")
 
+@cli.command()
+def init_db():
+    """Initialize the database schema"""
+    import click
+    from homelab.core.models import init_db as initialize_database
+    from homelab.config import DATABASE_URL
+    
+    click.echo(f"Initializing database...")
+    click.echo(f"Database URL: {DATABASE_URL}")
+    
+    try:
+        initialize_database(DATABASE_URL)
+        click.echo("Database initialized successfully!")
+        click.echo("Tables created: containers, version_history")
+    except Exception as e:
+        click.echo(f"Error initializing database: {e}", err=True)
+        raise
+
+@cli.command()
+@click.argument('container_name')
+def snapshot(container_name):
+    """Create a snapshot of container state"""
+    from homelab.core.models import init_db
+    from homelab.core.version_tracker import VersionTracker
+    
+    Session = init_db()
+    session = Session()
+    tracker = VersionTracker(session)
+    
+    snap = tracker.create_snapshot(container_name)
+    click.echo(f"Snapshot created for {container_name} at {snap.timestamp}")
+
+@cli.command()
+@click.argument('container_name')
+def history(container_name):
+    """Show version history for a container"""
+    from homelab.core.models import init_db
+    from homelab.core.version_tracker import VersionTracker
+    
+    Session = init_db()
+    session = Session()
+    tracker = VersionTracker(session)
+    
+    history = tracker.get_history(container_name)
+    
+    click.echo(f"\nVersion History for {container_name}:")
+    for h in history:
+        click.echo(f"  {h.timestamp} - {h.image_version} ({h.action})")
+
 if __name__ == '__main__':
     cli()
