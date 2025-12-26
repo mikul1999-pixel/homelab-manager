@@ -530,5 +530,145 @@ def list_compose():
     
     click.echo()
 
+@cli.command()
+@click.argument('container_name')
+@click.option('--auto-snapshot', is_flag=True, help='Automatically create snapshot if update available')
+def check_update(container_name, auto_snapshot):
+    """Check if a newer version of the container image is available"""
+    from homelab.core.update_checker import UpdateChecker
+    from homelab.core.models import init_db
+    from homelab.core.version_tracker import VersionTracker
+    from homelab.config import DATABASE_URL
+    
+    checker = UpdateChecker()
+    
+    click.echo(f"Checking for updates to {container_name}...")
+    
+    update_info = checker.check_for_update(container_name)
+    
+    if not update_info:
+        click.echo(f"{container_name} is up to date")
+        return 0
+    
+    click.echo(f"\nUpdate available for {container_name}!")
+    click.echo(f"   Current: {update_info['current_digest']}")
+    click.echo(f"   Latest:  {update_info['latest_digest']}")
+    
+    if auto_snapshot:
+        Session = init_db(DATABASE_URL)
+        session = Session()
+        tracker = VersionTracker(session)
+        
+        click.echo(f"\nCreating snapshot before update...")
+        snapshot = tracker.create_snapshot(container_name)
+        click.echo(f"Snapshot created (ID: {snapshot.id})")
+        click.echo(f"\nYou can now update the container. If issues occur:")
+        click.echo(f"  homelab rollback {container_name} {snapshot.id}")
+    else:
+        click.echo(f"\nTo snapshot before updating:")
+        click.echo(f"  homelab check-update {container_name} --auto-snapshot")
+    
+    return 0
+
+@cli.command()
+@click.option('--auto-snapshot', is_flag=True, help='Automatically create snapshots for containers with updates')
+def check_updates_all(auto_snapshot):
+    """Check all containers for available updates"""
+    from homelab.core.update_checker import UpdateChecker
+    from homelab.core.models import init_db
+    from homelab.core.version_tracker import VersionTracker
+    from homelab.config import DATABASE_URL
+    
+    checker = UpdateChecker()
+    
+    click.echo("Checking all containers for updates...\n")
+    
+    updates = checker.check_all_containers()
+    
+    if not updates:
+        click.echo("All containers are up to date")
+        return 0
+    
+    click.echo(f"Found {len(updates)} update(s) available:\n")
+    
+    for update in updates:
+        click.echo(f"  • {update['container_name']}")
+        click.echo(f"    {update['current_digest'][:40]}... → {update['latest_digest'][:40]}...")
+    
+    if auto_snapshot:
+        Session = init_db(DATABASE_URL)
+        session = Session()
+        tracker = VersionTracker(session)
+        
+        click.echo(f"\nCreating snapshots...")
+        for update in updates:
+            try:
+                snapshot = tracker.create_snapshot(update['container_name'])
+                click.echo(f"{update['container_name']} (snapshot ID: {snapshot.id})")
+            except Exception as e:
+                click.echo(f"{update['container_name']}: {e}")
+    else:
+        click.echo(f"\nTo snapshot all before updating:")
+        click.echo(f"  homelab check-updates-all --auto-snapshot")
+    
+    return 0
+
+@cli.command()
+@click.argument('container_name')
+@click.option('--force', '-f', is_flag=True, help='Skip confirmation')
+def update_container(container_name, force):
+    """Update container to latest image version"""
+    from homelab.core.update_checker import UpdateChecker
+    from homelab.core.models import init_db
+    from homelab.core.version_tracker import VersionTracker
+    from homelab.config import DATABASE_URL
+    
+    Session = init_db(DATABASE_URL)
+    session = Session()
+    tracker = VersionTracker(session)
+    checker = UpdateChecker()
+    
+    # Check if update is available
+    update_info = checker.check_for_update(container_name)
+    
+    if not update_info:
+        click.echo(f"{container_name} is already up to date")
+        return 0
+    
+    click.echo(f"\nUpdate available for {container_name}")
+    click.echo(f"  Current: {update_info['current_digest'][:50]}...")
+    click.echo(f"  Latest:  {update_info['latest_digest'][:50]}...")
+    
+    if not force:
+        click.echo()
+        if not click.confirm('Create snapshot and update?'):
+            click.echo("Update cancelled")
+            return 0
+    
+    # Create snapshot
+    click.echo(f"\nCreating snapshot...")
+    snapshot = tracker.create_snapshot(container_name)
+    click.echo(f"Snapshot created (ID: {snapshot.id})")
+    
+    # Get container details for recreate
+    details = tracker.docker_manager.get_container_details(container_name)
+    
+    # Pull latest image
+    click.echo(f"Pulling latest image...")
+    tracker.docker_manager.client.images.pull(details['image'])
+    
+    # Recreate container with latest
+    click.echo(f"Updating container...")
+    tracker.docker_manager.recreate_container(
+        name=container_name,
+        image=details['image'],
+        config=details
+    )
+    
+    click.echo(f"\nSuccessfully updated {container_name}")
+    click.echo(f"\nIf issues occur, rollback with:")
+    click.echo(f"   homelab rollback {container_name} {snapshot.id}")
+
+
 if __name__ == '__main__':
     cli()
