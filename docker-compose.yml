@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:16
-    container_name: homelab-postgres
+    container_name: homelab_postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-homelab}
@@ -22,7 +22,7 @@ services:
   # Add dashboard here later
   # dashboard:
   #   build: .
-  #   container_name: homelab-dashboard
+  #   container_name: homelab_dashboard
   #   restart: unless-stopped
   #   ports:
   #     - "${DASHBOARD_PORT:-8050}:8050"

@@ -155,18 +155,6 @@ def rollback(container_name, snapshot_id, force):
         if result['compose_synced']:
             click.echo(f"\nUpdated {result['env_path']}")
             click.echo(f"\nYour .env.manager file has been updated.")
-            click.echo(f"   To apply permanently, run:")
-            
-            if compose_config and compose_config.compose_files:
-                compose_cmd = "docker-compose"
-                for f in compose_config.compose_files:
-                    compose_cmd += f" -f {f}"
-                compose_cmd += " up -d"
-                click.echo(f"     cd {compose_config.compose_directory}")
-                click.echo(f"     {compose_cmd}")
-            else:
-                click.echo(f"     cd to your compose directory")
-                click.echo(f"     docker-compose up -d")
         else:
             click.echo(f"\nNote: This was a direct container rollback.")
             click.echo(f"   Your docker-compose files were not modified.")
@@ -206,8 +194,10 @@ def enable_compose(container_name, env_path, version_var, yes):
         click.echo(f"   Current path: {existing.manager_env_path}")
         if not yes and not click.confirm('\nReconfigure?'):
             return 0
-        existing.enabled = False
+        # Delete existing config so we can create fresh
+        session.delete(existing)
         session.commit()
+        click.echo("Removed existing configuration\n")
     
     # Get container details
     try:
@@ -250,16 +240,16 @@ def enable_compose(container_name, env_path, version_var, yes):
             suggested = ".env.manager"
         
         click.echo(f"Where should .env.manager be created?")
-        click.echo(f"  1. {suggested} (recommended)")
-        click.echo(f"  2. .env.manager (in compose root)")
+        click.echo(f"  1. .env.manager (in compose root)")
+        click.echo(f"  2. {suggested} (in service folder)")
         click.echo(f"  3. Custom path")
         
         choice = click.prompt('\nChoice', type=int, default=1)
-        
-        if choice == 1:
-            env_path = suggested
-        elif choice == 2:
+
+        if choice == 2:
             env_path = ".env.manager"
+        elif choice == 1:
+            env_path = suggested
         else:
             env_path = click.prompt('Enter custom path')
     
@@ -288,10 +278,10 @@ def enable_compose(container_name, env_path, version_var, yes):
             env_vars,
             header_comment=f"Version management for {container_name}"
         )
-        click.echo(f"✓ Created {full_env_path}")
-        click.echo(f"✓ Added: {version_var}={current_version}")
+        click.echo(f"Created {full_env_path}")
+        click.echo(f"Added: {version_var}={current_version}")
     except Exception as e:
-        click.echo(f"✗ Error creating .env.manager: {e}", err=True)
+        click.echo(f"Error creating .env.manager: {e}", err=True)
         return 1
     
     # Save config to database
@@ -308,7 +298,7 @@ def enable_compose(container_name, env_path, version_var, yes):
     session.add(config)
     session.commit()
     
-    click.echo(f"✓ Configuration saved\n")
+    click.echo(f"Configuration saved\n")
     
     click.echo("━" * 60)
     click.echo("Next Steps:")
@@ -322,23 +312,19 @@ def enable_compose(container_name, env_path, version_var, yes):
     else:
         target_file = "your compose file"
     
-    click.echo(f"1. Add to {target_file}:\n")
-    click.echo(f"   services:")
-    click.echo(f"     {compose_service or container_name}:")
-    click.echo(f"       env_file:")
-    click.echo(f"         - {env_path}")
+    click.echo(f"1. .env.manager for {target_file} is ready! \n")
     click.echo()
     click.echo(f"2. Test the configuration:\n")
     click.echo(f"   cd {compose_dir}")
     
     if compose_files:
-        compose_cmd = "docker-compose"
+        compose_cmd = f"docker-compose --env-file {env_path}"
         for f in compose_files:
             compose_cmd += f" -f {f}"
         compose_cmd += " config | grep " + version_var
         click.echo(f"   {compose_cmd}")
     else:
-        click.echo(f"   docker-compose config | grep {version_var}")
+        click.echo(f"   docker-compose --env-file {env_path} config | grep {version_var}")
     
     click.echo()
     click.echo(f"3. Verify with:\n")
@@ -353,11 +339,13 @@ def enable_compose(container_name, env_path, version_var, yes):
 
 @cli.command()
 @click.argument('container_name')
-def disable_compose(container_name):
+@click.option('--keep-file', is_flag=True, help='Keep .env.manager file (default: delete)')
+def disable_compose(container_name, keep_file):
     """Disable compose sync for a container"""
     from homelab.core.models import init_db
     from homelab.core.version_tracker import VersionTracker
     from homelab.config import DATABASE_URL
+    from pathlib import Path
     
     Session = init_db(DATABASE_URL)
     session = Session()
@@ -369,11 +357,26 @@ def disable_compose(container_name):
         click.echo(f"Compose sync not enabled for {container_name}")
         return 0
     
-    config.enabled = False
+    env_path = Path(config.manager_env_path)
+    
+    # Delete the database record
+    session.delete(config)
     session.commit()
     
-    click.echo(f"✓ Compose sync disabled for {container_name}")
-    click.echo(f"  (.env.manager file kept at {config.manager_env_path})")
+    click.echo(f"Compose sync disabled for {container_name}")
+    
+    # Optionally delete .env.manager file
+    if not keep_file and env_path.exists():
+        try:
+            env_path.unlink()
+            click.echo(f"Deleted {env_path}")
+        except Exception as e:
+            click.echo(f"Could not delete {env_path}: {e}")
+    else:
+        if env_path.exists():
+            click.echo(f"  .env.manager file kept at {env_path}")
+        else:
+            click.echo(f"  .env.manager file not found at {env_path}")
 
 @cli.command()
 @click.argument('container_name')
@@ -395,27 +398,27 @@ def verify_compose(container_name):
     # Check if enabled
     config = tracker.get_compose_config(container_name)
     if not config:
-        click.echo(f"✗ Compose sync not enabled")
+        click.echo(f"Compose sync not enabled")
         click.echo(f"  Run: homelab enable-compose {container_name}")
         return 1
     
-    click.echo(f"✓ Compose sync enabled")
+    click.echo(f"Compose sync enabled")
     
     # Check .env.manager exists
     env_path = Path(config.manager_env_path)
     if not env_path.exists():
-        click.echo(f"✗ .env.manager not found: {env_path}")
+        click.echo(f".env.manager not found: {env_path}")
         return 1
     
-    click.echo(f"✓ .env.manager exists: {env_path}")
+    click.echo(f".env.manager exists: {env_path}")
     
     # Check variable in .env.manager
     env_vars = compose_mgr.read_env_file(env_path)
     if config.version_variable not in env_vars:
-        click.echo(f"✗ Variable {config.version_variable} not in .env.manager")
+        click.echo(f"Variable {config.version_variable} not in .env.manager")
         return 1
     
-    click.echo(f"✓ Variable {config.version_variable} present in .env.manager")
+    click.echo(f"Variable {config.version_variable} present in .env.manager")
     
     # Get current container version
     current_version = tracker.get_current_version(container_name)
@@ -424,13 +427,13 @@ def verify_compose(container_name):
         env_ver = env_vars[config.version_variable]
         
         if container_ver == env_ver:
-            click.echo(f"✓ Version in sync: {container_ver}")
+            click.echo(f"Version in sync: {container_ver}")
         else:
-            click.echo(f"⚠ Version mismatch:")
+            click.echo(f"Version mismatch:")
             click.echo(f"  Container: {container_ver}")
             click.echo(f"  .env.manager: {env_ver}")
     
-    click.echo(f"\n✓ Everything looks good!")
+    click.echo(f"\nEverything looks good!")
     return 0
 
 @cli.command()

@@ -1,6 +1,6 @@
 # Homelab Manager
 
-Docker container version management and monitoring dashboard for home labs. Track versions, rollback changes, and optionally sync with docker-compose files.
+Docker container version management and monitoring dashboard for home labs. Track image versions, rollback updates, and optionally sync with docker-compose files.
 
 
 ## Features
@@ -108,7 +108,7 @@ python -m homelab.dashboard.app
 # Visit http://localhost:8050
 ```
 
-## Docker Compose Integration
+## Appendix: Docker Compose Integration
 
 Homelab Manager can optionally keep your docker-compose `.env` files in sync with rollbacks.
 
@@ -123,17 +123,21 @@ Follow the interactive prompts. This creates an `.env.manager` file with version
 
 **2. Update your compose file:**
 
-Add the `.env.manager` file to your service:
+Add the `.env.manager` variable to your service:
 
 ```yaml
 # immich.yml
 services:
   immich-server:
     image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-v1.117.0}
-    env_file:
-      - immich/.env          # Your existing config (optional)
-      - immich/.env.manager  # Managed by homelab-manager
 ```
+You can either combine `.env.manager` and `.env` with a `.sh` script or execute docker compose with `.env.manager`
+```bash
+docker compose --env-file .env --env-file .env.manager up -d
+```
+
+
+
 
 **3. Verify setup:**
 ```bash
@@ -153,8 +157,34 @@ homelab verify-compose immich-server
 - You can run `docker-compose up` anytime without conflicts
 
 
+## Appendix: PostgreSQL Interactions
+
+If you don't want to use commands like `history` or `verify-compose`, you can optionally manually interact with the database
+```bash
+cd homelab-manager
+docker exec -it homelab_postgres psql -U homelab -d homelab
+```
+
+Here are some sample queries
+```bash
+# Tables are defined in core/models.py
+SELECT container_name, image_version, ID, timestamp, action 
+FROM version_history 
+WHERE container_name='immich-server' 
+ORDER BY ID DESC;
+
+SELECT container_name, ID, timestamp
+FROM version_history 
+WHERE action='snapshot'
+ORDER BY container_name, ID DESC;
+
+SELECT container_name, compose_directory, manager_env_path, enabled
+FROM compose_config 
+ORDER BY container_name;
+```
+
 <br>
 
 ---
 
-**Note:** This is a personal development project. Features and functionality may change.
+**Note:** This is a personal project. Features and functionality may change.
