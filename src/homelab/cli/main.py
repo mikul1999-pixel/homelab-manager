@@ -65,6 +65,7 @@ def snapshot(container_name):
         click.echo(f"Snapshot created for {container_name}")
         click.echo(f"  ID: {snap.id}")
         click.echo(f"  Version: {snap.image_version}")
+        click.echo(f"  Version_ID: {snap.image_id}")
         click.echo(f"  Timestamp: {snap.timestamp}")
     except Exception as e:
         click.echo(f"Error creating snapshot: {e}", err=True)
@@ -89,11 +90,13 @@ def history(container_name):
         return
     
     click.echo(f"\nVersion History for {container_name}:")
-    click.echo(f"{'ID':<5} {'TIMESTAMP':<20} {'VERSION':<40} {'ACTION':<10}")
-    click.echo("-" * 85)
+    click.echo(f"{'ID':<5} {'TIMESTAMP':<20} {'VERSION':<30} {'DIGEST':<16} {'ACTION':<10}")
+    click.echo("-" * 95)
     
     for h in history:
-        click.echo(f"{h.id:<5} {str(h.timestamp):<20} {h.image_version:<40} {h.action:<10}")
+        # Show short digest for readability
+        digest_short = h.image_id[:12] if h.image_id.startswith('sha256:') else h.image_id[:19]
+        click.echo(f"{h.id:<5} {str(h.timestamp):<20} {h.image_version:<30} {digest_short:<16} {h.action:<10}")
 
 @cli.command()
 @click.argument('container_name')
@@ -103,11 +106,14 @@ def rollback(container_name, snapshot_id, force):
     """Rollback container to a previous snapshot"""
     from homelab.core.models import init_db
     from homelab.core.version_tracker import VersionTracker
+    from homelab.core.compose_manager import ComposeManager
     from homelab.config import DATABASE_URL
+    from pathlib import Path
     
     Session = init_db(DATABASE_URL)
     session = Session()
     tracker = VersionTracker(session)
+    compose_mgr = ComposeManager()
     
     # Get snapshot details
     snapshot = tracker.get_snapshot_by_id(snapshot_id)
@@ -121,16 +127,25 @@ def rollback(container_name, snapshot_id, force):
     # Check if compose sync is enabled
     compose_config = tracker.get_compose_config(container_name)
     
+    # Check if using floating tag
+    uses_floating_tag = tracker.is_floating_tag(snapshot.image_version)
+    
     # Show rollback info
     click.echo(f"\nRollback {container_name} to snapshot #{snapshot_id}:")
     click.echo(f"  Current version:  {current_version or 'unknown'}")
     click.echo(f"  Target version:   {snapshot.image_version}")
+    
+    if snapshot.image_digest:
+        digest_short = snapshot.image_digest.split(':')[-1][:16] if ':' in snapshot.image_digest else snapshot.image_digest[:16]
+        click.echo(f"  Target digest:    {digest_short}...")
+    
     click.echo(f"  Snapshot date:    {snapshot.timestamp}")
     click.echo(f"  Method:           Direct Docker API")
     
     if compose_config:
         click.echo(f"  Compose sync:     enabled")
-        click.echo(f"  Will update:      {compose_config.manager_env_path}")
+        if uses_floating_tag:
+            click.echo(f"Floating tag:   {compose_mgr.extract_version_from_image(snapshot.image_version)}")
     else:
         click.echo(f"  Compose sync:     disabled")
     
@@ -149,12 +164,50 @@ def rollback(container_name, snapshot_id, force):
         result = tracker.rollback_container(container_name, snapshot_id)
         
         click.echo("Starting container...")
-        click.echo(f"\nSuccessfully rolled back to {snapshot.image_version}")
+        
+        # Digest used for rollback
+        if snapshot.image_digest:
+            digest_short = snapshot.image_digest.split(':')[-1][:16] if ':' in snapshot.image_digest else snapshot.image_digest[:16]
+            click.echo(f"\nRolled back to {snapshot.image_version}")
+            click.echo(f"Using digest: {digest_short}... (exact version)")
+        else:
+            click.echo(f"\nRolled back to {snapshot.image_version}")
+        
         click.echo(f"Rollback recorded (ID: {result['rollback_record'].id})")
         
+        # Handle compose sync output
         if result['compose_synced']:
-            click.echo(f"\nUpdated {result['env_path']}")
-            click.echo(f"\nYour .env.manager file has been updated.")
+            compose_config = result['compose_config']
+            env_path = Path(result['env_path'])
+            
+            # Get relative path from compose directory
+            try:
+                relative_env_path = env_path.relative_to(compose_config.compose_directory)
+            except ValueError:
+                relative_env_path = env_path
+            
+            click.echo(f"\nUpdated {env_path}")
+            
+            # Special warning for floating tags. TODO: docker compose using digest?
+            if result['uses_floating_tag']:
+                tag = compose_mgr.extract_version_from_image(snapshot.image_version)
+                click.echo(f"\nIMPORTANT: This container uses a floating tag (:{tag})")
+                click.echo(f"   └─ The container was rolled back using the exact digest from the snapshot")
+                click.echo(f"   └─ However, your .env.manager still contains: {tag}")
+            else:
+                # Normal versioned tag
+                click.echo(f"\nTo apply the rollback permanently:\n")
+                click.echo(f"   cd {compose_config.compose_directory}")
+                
+                if compose_config.compose_files:
+                    compose_cmd = f"docker-compose --env-file {relative_env_path}"
+                    for f in compose_config.compose_files:
+                        compose_cmd += f" -f {f}"
+                    compose_cmd += " up -d"
+                    click.echo(f"   {compose_cmd}")
+                else:
+                    click.echo(f"   docker-compose --env-file {relative_env_path} up -d")
+            
         else:
             click.echo(f"\nNote: This was a direct container rollback.")
             click.echo(f"   Your docker-compose files were not modified.")
@@ -205,6 +258,23 @@ def enable_compose(container_name, env_path, version_var, yes):
     except Exception as e:
         click.echo(f"Error getting container details: {e}", err=True)
         return 1
+
+    # Check if using floating tag
+    current_version = compose_mgr.extract_version_from_image(details['image'])
+    uses_floating_tag = tracker.is_floating_tag(details['image'])
+
+    if uses_floating_tag:
+        click.echo(f"\nIMPORTANT: This container uses a floating tag (:{current_version})")
+        click.echo(f"   └─ The container will be rolled back using the exact digest from the snapshot")
+        click.echo(f"   └─ However, your .env.manager will still contain: {current_version}")
+        click.echo()
+        
+        if not yes and not click.confirm('Continue with compose sync anyway?'):
+            click.echo("\nCompose sync cancelled.")
+            click.echo("You can still use rollback without compose sync")
+            return 0
+        
+        click.echo()
     
     # Extract compose info
     compose_files_label = details.get('compose_files')

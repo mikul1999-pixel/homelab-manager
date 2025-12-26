@@ -21,6 +21,8 @@ class VersionHistory(Base):
     id = Column(Integer, primary_key=True)
     container_name = Column(String)
     image_version = Column(String)
+    image_digest = Column(String)
+    image_id = Column(String)
     config_snapshot = Column(JSON)
     timestamp = Column(DateTime, default=datetime.utcnow)
     action = Column(String)  # 'update', 'rollback', 'snapshot'

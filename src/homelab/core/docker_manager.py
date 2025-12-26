@@ -35,6 +35,18 @@ class DockerManager:
         """Get detailed container information"""
         container = self.client.containers.get(name)
         
+        # Get image info
+        image = container.image
+        image_tags = image.tags[0] if image.tags else image.id[:12]
+        
+        # Get the digest for unique ID
+        image_digest = None
+        if image.attrs.get('RepoDigests'):
+            image_digest = image.attrs['RepoDigests'][0]
+        
+        # Get image ID
+        image_id = image.id
+        
         # Extract compose info from labels
         labels = container.labels
         compose_project = labels.get('com.docker.compose.project', None)
@@ -44,7 +56,9 @@ class DockerManager:
         return {
             'id': container.id[:12],
             'name': container.name,
-            'image': container.image.tags[0] if container.image.tags else container.image.id[:12],
+            'image': image_tags,
+            'image_digest': image_digest,
+            'image_id': image_id,
             'status': container.status,
             'env_vars': container.attrs['Config']['Env'],
             'volumes': container.attrs['Mounts'],
@@ -58,12 +72,11 @@ class DockerManager:
             'compose_service': compose_service,
         }
     
-    def recreate_container(self, name: str, image: str, config: Dict) -> None:
-        """
-        Recreate a container with specific image and config (core rollback mechanism)
-        """
-        # Get current container
+    def recreate_container(self, name: str, image: str, config: Dict, image_digest: Optional[str] = None) -> None:
+        """Recreate a container with specific image and config (core rollback mechanism)"""
+
         try:
+            # Get current container
             container = self.client.containers.get(name)
             
             # Stop and remove
@@ -73,6 +86,7 @@ class DockerManager:
             pass
         
         # Parse info from config
+        image_to_use = image_digest if image_digest else image
         volumes = self._parse_volumes(config.get('volumes', []))
         ports = self._parse_ports(config.get('ports', {}))
         environment = config.get('env_vars', [])
@@ -82,7 +96,7 @@ class DockerManager:
         
         # Create new container
         new_container = self.client.containers.run(
-            image,
+            image_to_use,
             name=name,
             detach=True,
             environment=environment,
@@ -96,9 +110,7 @@ class DockerManager:
         return new_container
     
     def _parse_volumes(self, mounts: List[Dict]) -> Dict[str, Dict]:
-        """
-        Parse Docker volume mounts into format for containers.run()
-        """
+        """Parse Docker volume mounts into format for containers.run()"""
         volumes = {}
         for mount in mounts:
             if mount['Type'] == 'bind':
@@ -114,9 +126,7 @@ class DockerManager:
         return volumes
     
     def _parse_ports(self, ports: Dict) -> Dict:
-        """
-        Parse Docker port mappings into format for containers.run()
-        """
+        """Parse Docker port mappings into format for containers.run()"""
         parsed_ports = {}
         for container_port, host_bindings in ports.items():
             if host_bindings:
