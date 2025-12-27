@@ -168,7 +168,7 @@ docker exec -it homelab_postgres psql -U homelab -d homelab
 Here are some sample queries
 ```bash
 # Tables are defined in core/models.py
-SELECT container_name, image_version, ID, timestamp, action 
+SELECT container_name, image_version, image_digest, image_id, ID, timestamp, action 
 FROM version_history 
 WHERE container_name='immich-server' 
 ORDER BY ID DESC;

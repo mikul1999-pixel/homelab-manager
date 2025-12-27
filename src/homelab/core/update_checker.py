@@ -1,6 +1,6 @@
-import docker
 from typing import Dict, List, Optional
 from datetime import datetime
+import docker
 
 class UpdateChecker:
     """Check for updates to container images"""
@@ -10,52 +10,83 @@ class UpdateChecker:
     
     def check_for_update(self, container_name: str) -> Optional[Dict]:
         """Check if a newer version of the container's image is available"""
-        # Get container info
-        container = self.client.containers.get(container_name)
-        current_image = container.image
-        
-        current_digest = None
-        if current_image.attrs.get('RepoDigests'):
-            current_digest = current_image.attrs['RepoDigests'][0]
-        
-        # Get image name (without tag, :version_tag)
-        image_name = current_image.tags[0] if current_image.tags else None
-        if not image_name:
+        try:
+            container = self.client.containers.get(container_name)
+        except docker.errors.NotFound:
+            print(f"Container {container_name} not found")
             return None
+        
+        # Get image name from container config
+        image_name = container.attrs['Config']['Image']
+        
+        if not image_name:
+            print(f"Container {container_name} has no image name")
+            return None
+        
+        # Get current image ID
+        current_image = container.image
+        current_image_id = current_image.id
+        
+        # Extract the pullable image name (remove digest)
+        pullable_image_name = self._get_pullable_image_name(image_name)
         
         # Pull latest version
+        print(f"  Pulling {pullable_image_name}...")
         try:
-            latest_image = self.client.images.pull(image_name)
+            latest_image = self.client.images.pull(pullable_image_name)
+        except docker.errors.APIError as e:
+            print(f"  Error pulling {pullable_image_name}: {e}")
+            return None
         except Exception as e:
-            print(f"Error pulling {image_name}: {e}")
+            print(f"  Unexpected error pulling {pullable_image_name}: {e}")
             return None
         
-        # Get latest digest
-        latest_digest = None
-        if latest_image.attrs.get('RepoDigests'):
-            latest_digest = latest_image.attrs['RepoDigests'][0]
+        latest_image_id = latest_image.id
         
-        # Compare digests
-        if latest_digest and current_digest and latest_digest != current_digest:
+        # Get digests
+        current_digest = self._get_digest(current_image)
+        latest_digest = self._get_digest(latest_image)
+        
+        # Compare using digest or image ID
+        if current_digest and latest_digest:
+            update_available = current_digest != latest_digest
+        else:
+            update_available = current_image_id != latest_image_id
+        
+        if update_available:
             return {
                 'container_name': container_name,
-                'image_name': image_name,
-                'current_digest': current_digest,
-                'latest_digest': latest_digest,
+                'image_name': pullable_image_name,
+                'current_digest': current_digest or current_image_id,
+                'latest_digest': latest_digest or latest_image_id,
                 'update_available': True,
                 'checked_at': datetime.utcnow()
             }
         
         return None
     
-    def check_all_containers(self) -> List[Dict]:
-        """Check all running containers for updates"""
-        containers = self.client.containers.list()
-        updates = []
+    def _get_pullable_image_name(self, image_name: str) -> str:
+        """Extract pullable image name from config"""
+        # If image was created with digest, remove digest @sha... and add :latest
+        if '@sha256:' in image_name:
+            # Extract the repo part before @
+            repo_part = image_name.split('@')[0]
+            # Add :latest if no tag
+            if ':' not in repo_part:
+                return f"{repo_part}:latest"
+            return repo_part
         
-        for container in containers:
-            update_info = self.check_for_update(container.name)
-            if update_info:
-                updates.append(update_info)
+        # If no tag specified, add :latest
+        if ':' not in image_name and '@' not in image_name:
+            return f"{image_name}:latest"
         
-        return updates
+        return image_name
+    
+    def _get_digest(self, image) -> Optional[str]:
+        """Get digest from image"""
+        # Try RepoDigests
+        if image.attrs.get('RepoDigests'):
+            return image.attrs['RepoDigests'][0]
+        
+        # image ID as fallback
+        return image.id

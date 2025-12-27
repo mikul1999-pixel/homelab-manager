@@ -36,7 +36,7 @@ class VersionTracker:
             .filter_by(container_name=container_name)\
             .order_by(VersionHistory.timestamp.desc())\
             .all()
-    
+            
     def get_snapshot_by_id(self, snapshot_id: int) -> Optional[VersionHistory]:
         """Get a specific snapshot by ID"""
         return self.session.query(VersionHistory)\
@@ -80,7 +80,7 @@ class VersionTracker:
             name=container_name,
             image=snapshot.image_version,
             config=snapshot.config_snapshot,
-            image_digest=snapshot.image_digest
+            image_digest=snapshot.image_digest or snapshot.image_id
         )
         
         # Log the rollback action
