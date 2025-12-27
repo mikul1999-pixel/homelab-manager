@@ -23,7 +23,7 @@ class UpdateManager:
                 on_event(msg)
 
         # Step 1: Snapshot current version
-        emit("Creating snapshot of current version...")
+        emit("\nCreating snapshot of current version...")
         before_snapshot = self.tracker.create_snapshot(container_name)
         emit(f"Snapshot created (ID: {before_snapshot.id})")
 

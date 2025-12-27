@@ -82,24 +82,34 @@ def version(container_name):
     Session = init_db(DATABASE_URL)
     session = Session()
     tracker = VersionTracker(session)
+
+    img = tracker.get_version_info(container_name)
     
-    try:
-        img = tracker.get_version_info(container_name)
+    if img:
         img_name = tracker.get_version_name(container_name)
         click.echo(f"Image tracking for {container_name}")
         click.echo(f"  ID: {img.id}")
         click.echo(f"  Version: {img_name}")
         click.echo(f"  Pattern: {img.tag_pattern}")
         click.echo(f"  Detect new tags: {img.auto_detect_tags}")
-    except Exception as e:
-        click.echo(f"Error finding image tags: {e}", err=True)
-        raise
+
+        # Check if compose sync is enabled
+        compose_config = tracker.get_compose_config(container_name)
+        if compose_config:
+            click.echo(f"  Compose sync: enabled")
+        else:
+            click.echo(f"  Compose sync: disabled")
+            
+    else:
+        click.echo(f"No image being tracked for {container_name}")
+        click.echo(f"To begin tracking, snapshot your container:")
+        click.echo(f"homelab snapshot {container_name}")
 
 @cli.command()
 @click.argument('container_name')
 @click.argument('tag')
 def change_version(container_name, tag):
-    """Change the image tag to tracked for a container"""
+    """Change the image tag to track for a container"""
     from homelab.core.models import init_db
     from homelab.core.version_tracker import VersionTracker
     from homelab.config import DATABASE_URL
@@ -109,13 +119,70 @@ def change_version(container_name, tag):
     tracker = VersionTracker(session)
     
     try:
-        tag_info = tracker.add_version_tag(container_name, tag)
-        click.echo(f"Image tracking for {container_name}")
+        # Check if compose sync is enabled
+        compose_config = tracker.get_compose_config(container_name)
+        if compose_config:
+            click.echo(f"  Compose sync:     enabled")
+            click.echo(f"  Will update:      {compose_config.manager_env_path}")
+        else:
+            click.echo(f"  Compose sync:     disabled")
+
+        # Change tag
+        tag_info = tracker.add_version_tag(container_name, tag, on_event=click.echo)
+
+        click.echo(f"\nImage tracked for {container_name}")
         click.echo(f"  Old tag: {tag_info['old_tag']}")
         click.echo(f"  New tag: {tag_info['new_tag']}")
+
+        # Compose sync results
+        if tag_info['compose_synced']:
+            click.echo(f"\nUpdated {tag_info['env_path']}")
+            click.echo(f"\nYour .env.manager file has been updated.")
+            click.echo(f"   To apply permanently, run:")
+            
+            if compose_config and compose_config.compose_files:
+                compose_cmd = "docker-compose"
+                for f in compose_config.compose_files:
+                    compose_cmd += f" -f {f}"
+                compose_cmd += " up -d"
+                click.echo(f"     cd {compose_config.compose_directory}")
+                click.echo(f"     {compose_cmd}")
+            else:
+                click.echo(f"     cd to your compose directory")
+                click.echo(f"     docker-compose up -d")
+        else:
+            click.echo(f"\nNote: This was a direct container rollback.")
+            click.echo(f"   Your docker-compose files were not modified.")
+            if not compose_config:
+                click.echo(f"   To enable compose sync, run: homelab enable-compose {container_name}")
+
     except Exception as e:
         click.echo(f"Error updating image tags: {e}", err=True)
         raise
+
+@cli.command()
+def list_version():
+    """List all containers and their version tag"""
+    from homelab.core.models import init_db, ImageTag
+    from homelab.config import DATABASE_URL
+    
+    Session = init_db(DATABASE_URL)
+    session = Session()
+    
+    configs = session.query(ImageTag).all()
+    
+    if not configs:
+        click.echo("\nNo containers with image tags stored")
+        click.echo("Run 'homelab snapshot <container>' to store")
+        return
+    
+    click.echo(f"\n{'CONTAINER':<20} {'VERSION REPO':<20} {'VERSION TAG':<20} {'TAG PATTERN':<40}")
+    click.echo("-" * 80)
+    
+    for config in configs:
+        click.echo(f"{config.container_name:<20} {config.image_repo:<20} {config.tag:<20} {config.tag_pattern:<40}")
+    
+    click.echo()
 
 @cli.command()
 @click.argument('container_name')

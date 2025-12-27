@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import List, Dict, Optional
 from pathlib import Path
-from homelab.core.models import VersionHistory, ImageTag
+from homelab.core.models import VersionHistory, ComposeConfig, ImageTag
 from homelab.core.docker_manager import DockerManager
+from homelab.core.compose_manager import ComposeManager
 
 class VersionTracker:
     """Tracks container version history"""
@@ -10,6 +11,7 @@ class VersionTracker:
     def __init__(self, session):
         self.session = session
         self.docker_manager = DockerManager()
+        self.compose_manager = ComposeManager()
     
     def create_snapshot(self, container_name: str) -> VersionHistory:
         """Create a snapshot of current container state"""
@@ -119,23 +121,58 @@ class VersionTracker:
             return image.split(':')[-1]
         return 'latest'
 
-    def add_version_tag(self, container_name: str, tag: str) -> dict:
+    def add_version_tag(self, container_name: str, tag: str, on_event=None) -> Optional[Dict]:
         """Change major version tag for a container"""
+
+        def emit(msg):
+            if on_event:
+                on_event(msg)
+                
         # Initialize tag tracking if needed
         details = self.docker_manager.get_container_details(container_name)
         tag_info = self.get_version_info(container_name)
 
         if not tag_info:
+            emit(f"Initializing tag tracking...")
             tag_info = self._init_tag_tracking(container_name, details)
-            print(f"Initialized tag tracking")
+            emit(f"\nVersion info logged for {container_name}")
+            emit(f"  repo: {tag_info.repo}")          
+            emit(f"  tag: {tag_info.tag}")
+            emit(f"  pattern: {tag_info.tag_pattern}")
+            emit(f"\n")
 
+        # Change tag
         old_tag = tag_info.tag
         tag_info.tag = tag
         self.session.commit()
 
+        # Check if compose sync is enabled
+        compose_config = self.get_compose_config(container_name)
+        compose_synced = False
+        env_path = None
+        
+        if compose_config:
+            try:
+                # Update .env.manager file
+                env_path = Path(compose_config.manager_env_path)
+                version_value = tag
+                
+                self.compose_manager.update_env_variable(
+                    env_path,
+                    compose_config.version_variable,
+                    version_value
+                )
+                
+                compose_synced = True
+            except Exception as e:
+                print(f"Warning: Failed to sync compose: {e}")
+        
         return {
-            "old_tag": old_tag,
-            "new_tag": tag,
+            'old_tag': old_tag,
+            'new_tag': tag,
+            'compose_synced': compose_synced,
+            'env_path': str(env_path) if env_path else None,
+            'compose_config': compose_config
         }
 
     def get_history(self, container_name: str) -> List[VersionHistory]:
@@ -149,6 +186,12 @@ class VersionTracker:
         """Get a specific snapshot by ID"""
         return self.session.query(VersionHistory)\
             .filter_by(id=snapshot_id)\
+            .first()
+
+    def get_compose_config(self, container_name: str) -> Optional[ComposeConfig]:
+        """Get compose configuration for a container"""
+        return self.session.query(ComposeConfig)\
+            .filter_by(container_name=container_name, enabled=True)\
             .first()
     
     def rollback_container(self, container_name: str, snapshot_id: int) -> Dict:
