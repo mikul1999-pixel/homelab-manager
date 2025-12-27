@@ -129,7 +129,7 @@ python -m homelab.dashboard.app
 
 ## Appendix
 
-### Automated Version Control vs Planned Changes
+### [01] Automated Version Control vs Planned Changes
 **Version Control** - Snapshot, update, and rollback the container state:
 - Alters the underlying image digest (hash of v2.117.0)
 - Stays on the same major version (v2 → v2 new digest)
@@ -142,7 +142,7 @@ python -m homelab.dashboard.app
 - Alters version control to track (v3 → v3 new digest)
 
 
-### Docker Compose Integration
+### [02] Docker Compose Integration
 
 Homelab Manager can optionally keep your docker-compose `.env` files in sync with major changes.
 
@@ -170,9 +170,6 @@ You can either combine `.env.manager` and `.env` with a `.sh` script or execute 
 docker compose --env-file .env --env-file .env.manager up -d
 ```
 
-
-
-
 **3. Verify setup:**
 ```bash
 homelab verify-compose immich-server
@@ -191,7 +188,7 @@ homelab verify-compose immich-server
 - You can run `docker-compose up` without major version conflicts
 
 
-### PostgreSQL Interactions
+### [03] PostgreSQL Interactions
 
 If you don't want to use commands like `history` or `verify-compose`, you can optionally manually interact with the database
 ```bash
