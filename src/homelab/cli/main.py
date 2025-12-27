@@ -73,6 +73,52 @@ def snapshot(container_name):
 
 @cli.command()
 @click.argument('container_name')
+def version(container_name):
+    """Check which image tag is being tracked for a container"""
+    from homelab.core.models import init_db
+    from homelab.core.version_tracker import VersionTracker
+    from homelab.config import DATABASE_URL
+    
+    Session = init_db(DATABASE_URL)
+    session = Session()
+    tracker = VersionTracker(session)
+    
+    try:
+        img = tracker.get_version_info(container_name)
+        img_name = tracker.get_version_name(container_name)
+        click.echo(f"Image tracking for {container_name}")
+        click.echo(f"  ID: {img.id}")
+        click.echo(f"  Version: {img_name}")
+        click.echo(f"  Pattern: {img.tag_pattern}")
+        click.echo(f"  Detect new tags: {img.auto_detect_tags}")
+    except Exception as e:
+        click.echo(f"Error finding image tags: {e}", err=True)
+        raise
+
+@cli.command()
+@click.argument('container_name')
+@click.argument('tag')
+def change_version(container_name, tag):
+    """Change the image tag to tracked for a container"""
+    from homelab.core.models import init_db
+    from homelab.core.version_tracker import VersionTracker
+    from homelab.config import DATABASE_URL
+    
+    Session = init_db(DATABASE_URL)
+    session = Session()
+    tracker = VersionTracker(session)
+    
+    try:
+        tag_info = tracker.add_version_tag(container_name, tag)
+        click.echo(f"Image tracking for {container_name}")
+        click.echo(f"  Old tag: {tag_info['old_tag']}")
+        click.echo(f"  New tag: {tag_info['new_tag']}")
+    except Exception as e:
+        click.echo(f"Error updating image tags: {e}", err=True)
+        raise
+
+@cli.command()
+@click.argument('container_name')
 def history(container_name):
     """Show version history for a container"""
     from homelab.core.models import init_db
@@ -106,48 +152,32 @@ def rollback(container_name, snapshot_id, force):
     """Rollback container to a previous snapshot"""
     from homelab.core.models import init_db
     from homelab.core.version_tracker import VersionTracker
-    from homelab.core.compose_manager import ComposeManager
+    from homelab.core.update_checker import UpdateChecker
     from homelab.config import DATABASE_URL
     from pathlib import Path
     
     Session = init_db(DATABASE_URL)
     session = Session()
     tracker = VersionTracker(session)
-    compose_mgr = ComposeManager()
-    
+    checker = UpdateChecker(session)
+
     # Get snapshot details
     snapshot = tracker.get_snapshot_by_id(snapshot_id)
     if not snapshot:
         click.echo(f"Snapshot {snapshot_id} not found", err=True)
         return 1
+    snapshot_reference = snapshot.image_digest or snapshot.image_id
     
     # Get current version
-    current_version = tracker.get_current_version(container_name)
-    
-    # Check if compose sync is enabled
-    compose_config = tracker.get_compose_config(container_name)
-    
-    # Check if using floating tag
-    uses_floating_tag = tracker.is_floating_tag(snapshot.image_version)
+    current_version = checker.get_current_image(container_name)
+    current_version_reference = current_version['version_reference']
     
     # Show rollback info
     click.echo(f"\nRollback {container_name} to snapshot #{snapshot_id}:")
-    click.echo(f"  Current version:  {current_version or 'unknown'}")
-    click.echo(f"  Target version:   {snapshot.image_version}")
-    
-    if snapshot.image_digest:
-        digest_short = snapshot.image_digest.split(':')[-1][:16] if ':' in snapshot.image_digest else snapshot.image_digest[:16]
-        click.echo(f"  Target digest:    {digest_short}...")
-    
+    click.echo(f"  Current version:  {current_version_reference or 'unknown'}")
+    click.echo(f"  Target digest:    {snapshot_reference}")   
     click.echo(f"  Snapshot date:    {snapshot.timestamp}")
     click.echo(f"  Method:           Direct Docker API")
-    
-    if compose_config:
-        click.echo(f"  Compose sync:     enabled")
-        if uses_floating_tag:
-            click.echo(f"Floating tag:   {compose_mgr.extract_version_from_image(snapshot.image_version)}")
-    else:
-        click.echo(f"  Compose sync:     disabled")
     
     # Confirm unless --force
     if not force:
@@ -166,8 +196,8 @@ def rollback(container_name, snapshot_id, force):
         click.echo("Starting container...")
         
         # Digest used for rollback
-        if snapshot.image_digest:
-            digest_short = snapshot.image_digest.split(':')[-1][:16] if ':' in snapshot.image_digest else snapshot.image_digest[:16]
+        if snapshot_reference:
+            digest_short = snapshot_reference.split(':')[-1][:16] if ':' in snapshot_reference else snapshot_reference[:16]
             click.echo(f"\nRolled back to {snapshot.image_version}")
             click.echo(f"Using digest: {digest_short}... (exact version)")
         else:
@@ -175,48 +205,10 @@ def rollback(container_name, snapshot_id, force):
         
         click.echo(f"Rollback recorded (ID: {result['rollback_record'].id})")
         
-        # Handle compose sync output
-        if result['compose_synced']:
-            compose_config = result['compose_config']
-            env_path = Path(result['env_path'])
-            
-            # Get relative path from compose directory
-            try:
-                relative_env_path = env_path.relative_to(compose_config.compose_directory)
-            except ValueError:
-                relative_env_path = env_path
-            
-            click.echo(f"\nUpdated {env_path}")
-            
-            # Special warning for floating tags. TODO: docker compose using digest?
-            if result['uses_floating_tag']:
-                tag = compose_mgr.extract_version_from_image(snapshot.image_version)
-                click.echo(f"\nIMPORTANT: This container uses a floating tag (:{tag})")
-                click.echo(f"   └─ The container was rolled back using the exact digest from the snapshot")
-                click.echo(f"   └─ However, your .env.manager still contains: {tag}")
-            else:
-                # Normal versioned tag
-                click.echo(f"\nTo run with docker-compose (incl rollback):\n")
-                click.echo(f"   cd {compose_config.compose_directory}")
-                
-                if compose_config.compose_files:
-                    compose_cmd = f"docker-compose --env-file {relative_env_path}"
-                    for f in compose_config.compose_files:
-                        compose_cmd += f" -f {f}"
-                    compose_cmd += " up -d"
-                    click.echo(f"   {compose_cmd}")
-                else:
-                    click.echo(f"   docker-compose --env-file {relative_env_path} up -d")
-            
-        else:
-            click.echo(f"\nNote: This was a direct container rollback.")
-            click.echo(f"   Your docker-compose files were not modified.")
-            if not compose_config:
-                click.echo(f"   To enable compose sync, run: homelab enable-compose {container_name}")
-        
     except Exception as e:
         click.echo(f"\nRollback failed: {e}", err=True)
         raise
+
 
 @cli.command()
 @click.argument('container_name')
@@ -532,54 +524,38 @@ def list_compose():
 
 @cli.command()
 @click.argument('container_name')
-@click.option('--auto-update', is_flag=True, help='Automatically update if newer version available')
-def check_update(container_name, auto_update):
+def check_update(container_name):
     """Check if a newer version of the container image is available"""
     from homelab.core.update_checker import UpdateChecker
+    from homelab.core.update_manager import UpdateManager
     from homelab.core.models import init_db
     from homelab.config import DATABASE_URL
     
-    checker = UpdateChecker()
+    Session = init_db(DATABASE_URL)
+    session = Session()
+    checker = UpdateChecker(session)
+    updater = UpdateManager(session)
     
     click.echo(f"Checking for updates to {container_name}...")
     
-    update_info = checker.check_for_update(container_name)
+    update_info = checker.check_for_update(container_name, on_event=click.echo,)
     
     if not update_info:
-        click.echo(f"{container_name} is up to date")
         return 0
     
     # Show available update
-    current_short = update_info['current_digest'].split(':')[-1][:16] if ':' in update_info['current_digest'] else update_info['current_digest'][:16]
-    latest_short = update_info['latest_digest'].split(':')[-1][:16] if ':' in update_info['latest_digest'] else update_info['latest_digest'][:16]
-    
-    click.echo(f"\nUpdate available for {container_name}!")
-    click.echo(f"   Current digest: {current_short}...")
-    click.echo(f"   Latest digest:  {latest_short}...")
-    
-    if auto_update:
-        # Call update_container
-        click.echo()
-        from click.testing import CliRunner
-        from homelab.cli.main import update_container
-        
-        # Use the context to call update_container with force flag
-        ctx = click.get_current_context()
-        ctx.invoke(update_container, container_name=container_name, force=True)
-    else:
-        click.echo(f"\nTo update:")
-        click.echo(f"  homelab update-container {container_name}")
-        click.echo(f"\nOr to check and auto-update:")
-        click.echo(f"  homelab check-update {container_name} --auto-update")
+    click.echo(f"\nTo update:")
+    click.echo(f"  homelab update {container_name}")
     
     return 0
 
 @cli.command()
 @click.argument('container_name')
 @click.option('--force', '-f', is_flag=True, help='Skip confirmation')
-def update_container(container_name, force):
+def update(container_name, force):
     """Update container to latest image version"""
     from homelab.core.update_checker import UpdateChecker
+    from homelab.core.update_manager import UpdateManager
     from homelab.core.models import init_db, VersionHistory
     from homelab.core.version_tracker import VersionTracker
     from homelab.config import DATABASE_URL
@@ -588,132 +564,38 @@ def update_container(container_name, force):
     Session = init_db(DATABASE_URL)
     session = Session()
     tracker = VersionTracker(session)
-    checker = UpdateChecker()
+    checker = UpdateChecker(session)
+    updater = UpdateManager(session)
     
-    # Check if update is available
-    update_info = checker.check_for_update(container_name)
-    
+    update_info = checker.check_for_update(container_name, on_event=click.echo,)
     if not update_info:
-        click.echo(f"{container_name} is already up to date")
         return 0
-    
-    # Show update info
-    current_short = update_info['current_digest'].split(':')[-1][:16] if ':' in update_info['current_digest'] else update_info['current_digest'][:16]
-    latest_short = update_info['latest_digest'].split(':')[-1][:16] if ':' in update_info['latest_digest'] else update_info['latest_digest'][:16]
-    
-    click.echo(f"\nUpdate available for {container_name}")
-    click.echo(f"  Current digest: {current_short}...")
-    click.echo(f"  Latest digest:  {latest_short}...")
-    
+
     # Confirm unless --force
     if not force:
         click.echo()
-        if not click.confirm('Create snapshot and update?'):
+        if not click.confirm("Continue with update?"):
             click.echo("Update cancelled")
             return 0
-    
-    # Step 1: Create snapshot of CURRENT version
-    click.echo(f"\nCreating snapshot of current version...")
-    current_snapshot = tracker.create_snapshot(container_name)
-    click.echo(f"Current version snapshot created (ID: {current_snapshot.id})")
-    
-    # Step 2: Get current container details
-    details = tracker.docker_manager.get_container_details(container_name)
-    
-    # Step 3: Update the container with new digest
-    new_digest = update_info['latest_digest']
-    click.echo(f"Updating container to new version...")
-    try:
-        tracker.docker_manager.recreate_container(
-            name=container_name,
-            image=details['image'],
-            config=details,
-            image_digest=new_digest
-        )
-        click.echo(f"Container updated")
-    except Exception as e:
-        click.echo(f"Failed to update container: {e}", err=True)
-        click.echo(f"\nRolling back to snapshot {current_snapshot.id}...")
-        try:
-            tracker.rollback_container(container_name, current_snapshot.id)
-            click.echo(f"Rolled back successfully")
-        except Exception as rollback_error:
-            click.echo(f"Rollback also failed: {rollback_error}", err=True)
+
+    # Perform update
+    result = updater.update_container(container_name, on_event=click.echo,)
+
+    if not result.get("updated"):
+        click.echo(f"\nUpdate failed: {result.get('reason')}")
+        if "error" in result:
+            click.echo(f"Error: {result['error']}")
         return 1
-    
-    # Step 4: Create snapshot of NEW version (with action='update')
-    click.echo(f"Creating snapshot of new version...")
-    
-    # Create the snapshot with action='update'
-    new_details = tracker.docker_manager.get_container_details(container_name)
-    
-    update_snapshot = VersionHistory(
-        container_name=container_name,
-        image_version=new_details['image'],
-        image_digest=new_details.get('image_digest'),
-        image_id=new_details.get('image_id'),
-        config_snapshot=new_details,
-        action='update'
-    )
-    
-    session.add(update_snapshot)
-    session.commit()
-    
-    click.echo(f"New version snapshot created (ID: {update_snapshot.id})")
-    
-    # Step 5: Update compose sync if enabled
-    compose_config = tracker.get_compose_config(container_name)
-    if compose_config:
-        try:
-            env_path = Path(compose_config.manager_env_path)
-            version_value = tracker.compose_manager.extract_version_from_image(
-                new_details['image']
-            )
-            
-            tracker.compose_manager.update_env_variable(
-                env_path,
-                compose_config.version_variable,
-                version_value
-            )
-            
-            click.echo(f"Updated {env_path}")
-            
-            # Check if using floating tag
-            uses_floating_tag = tracker.is_floating_tag(new_details['image'])
-            
-            if uses_floating_tag:
-                tag = tracker.compose_manager.extract_version_from_image(new_details['image'])
-                click.echo(f"\nIMPORTANT: This container uses a floating tag (:{tag})")
-                click.echo(f"   └─ The container was rolled back using the exact digest from the snapshot")
-                click.echo(f"   └─ However, your .env.manager still contains: {tag}")
-            else:
-                click.echo(f"\nTo run with docker-compose:")
-                try:
-                    relative_env_path = env_path.relative_to(compose_config.compose_directory)
-                except ValueError:
-                    relative_env_path = env_path
-                
-                click.echo(f"   cd {compose_config.compose_directory}")
-                
-                if compose_config.compose_files:
-                    compose_cmd = f"docker-compose --env-file {relative_env_path}"
-                    for f in compose_config.compose_files:
-                        compose_cmd += f" -f {f}"
-                    compose_cmd += " up -d"
-                    click.echo(f"   {compose_cmd}")
-                else:
-                    click.echo(f"   docker-compose --env-file {relative_env_path} up -d")
-        except Exception as e:
-            click.echo(f"Failed to update compose sync: {e}")
-    
-    # Summary
+
+    # Success summary
     click.echo(f"\nSuccessfully updated {container_name}")
     click.echo(f"\nSnapshots created:")
-    click.echo(f"  • Before update: ID {current_snapshot.id}")
-    click.echo(f"  • After update:  ID {update_snapshot.id}")
+    click.echo(f"  • Before update: ID {result['before_snapshot']}")
+    click.echo(f"  • After update:  ID {result['after_snapshot']}")
+
     click.echo(f"\nIf issues occur, rollback with:")
-    click.echo(f"  homelab rollback {container_name} {current_snapshot.id}")
-    
+    click.echo(f"  homelab rollback {container_name} {result['before_snapshot']}")
+
     return 0
 
 

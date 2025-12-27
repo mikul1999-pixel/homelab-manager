@@ -83,6 +83,12 @@ homelab rollback <container_name> <snapshot_id>
 
 # Rollback without confirmation
 homelab rollback <container_name> <snapshot_id> --force
+
+# Check if an image update is needed
+homelab check-update <container_name>
+
+# Update to newest image version
+homelab update <container_name>
 ```
 
 #### Compose Integration (Optional)

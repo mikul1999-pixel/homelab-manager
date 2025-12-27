@@ -35,9 +35,11 @@ class DockerManager:
         """Get detailed container information"""
         container = self.client.containers.get(name)
         
-        # Get image info
+        # Get version tag from image_tags
+        image_version = container.attrs['Config']['Image']
+
+        # Get current image info
         image = container.image
-        image_tags = image.tags[0] if image.tags else image.id[:12]
         
         # Get the digest for unique ID
         image_digest = None
@@ -56,7 +58,7 @@ class DockerManager:
         return {
             'id': container.id[:12],
             'name': container.name,
-            'image': image_tags,
+            'image': image_version,
             'image_digest': image_digest,
             'image_id': image_id,
             'status': container.status,

@@ -51,18 +51,8 @@ class ComposeManager:
         env_vars[var_name] = var_value
         self.write_env_file(env_path, env_vars)
     
-    def extract_version_from_image(self, image: str) -> str:
-        """
-        Extract version from image string
-        """
-        if ':' in image:
-            return image.split(':')[-1]
-        return 'latest'
-    
     def guess_version_variable(self, container_name: str, service_name: Optional[str] = None) -> str:
-        """
-        Default environment variable name from container name
-        """
+        """Default environment variable name from container name"""
         name = service_name or container_name
         
         # Remove common suffixes
@@ -81,9 +71,7 @@ class ComposeManager:
         return f"{base_name.upper()}_VERSION"
     
     def parse_compose_files_from_label(self, label_value: str) -> List[str]:
-        """
-        Parse compose files from Docker label
-        """
+        """Parse compose files from Docker label"""
         if not label_value:
             return []
         
@@ -92,9 +80,7 @@ class ComposeManager:
         return [Path(f).name for f in files]
     
     def find_compose_directory(self, label_value: str) -> Optional[Path]:
-        """
-        Extract compose directory from Docker label
-        """
+        """Extract compose directory from Docker label"""
         if not label_value:
             return None
         

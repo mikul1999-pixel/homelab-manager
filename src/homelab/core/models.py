@@ -5,13 +5,15 @@ from datetime import datetime
 
 Base = declarative_base()
 
-class Container(Base):
-    __tablename__ = 'containers'
+class ImageTag(Base):
+    __tablename__ = 'image_tags'
     
     id = Column(Integer, primary_key=True)
-    docker_id = Column(String, unique=True)
-    name = Column(String, unique=True)
-    current_image = Column(String)
+    container_name = Column(String, unique=True, nullable=False)
+    image_repo = Column(String, nullable=False)
+    tag = Column(String, nullable=False)
+    tag_pattern = Column(String)
+    auto_detect_tags = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -20,7 +22,7 @@ class VersionHistory(Base):
     
     id = Column(Integer, primary_key=True)
     container_name = Column(String)
-    image_version = Column(String)
+    image_version = Column(String) # from image_tags
     image_digest = Column(String)
     image_id = Column(String)
     config_snapshot = Column(JSON)
