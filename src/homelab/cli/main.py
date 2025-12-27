@@ -26,6 +26,7 @@ def details(container_name):
     
     click.echo(f"\nContainer: {details['name']}")
     click.echo(f"Image: {details['image']}")
+    click.echo(f"Image digest: {details['image_digest']}")
     click.echo(f"Status: {details['status']}")
     click.echo(f"\nEnvironment Variables:")
     for env in details['env_vars']:
@@ -297,7 +298,7 @@ def enable_compose(container_name, env_path, version_var, yes):
     
     click.echo(f"\n=== Enable Compose Sync for {container_name} ===\n")
     click.echo("This will create .env.manager files that stay in sync with")
-    click.echo("container rollbacks. No compose commands will be run automatically.\n")
+    click.echo("major version changes. No compose commands will be run automatically.\n")
     
     # Check if already enabled
     existing = tracker.get_compose_config(container_name)
@@ -318,13 +319,14 @@ def enable_compose(container_name, env_path, version_var, yes):
         click.echo(f"Error getting container details: {e}", err=True)
         return 1
 
-    # Check if using floating tag
-    current_version = compose_mgr.extract_version_from_image(details['image'])
-    uses_floating_tag = tracker.is_floating_tag(details['image'])
+    # Get current tag info
+    tag_info = tracker.get_version_info(container_name)
+    current_version = tag_info.tag
+    uses_floating_tag = tag_info.tag_pattern == "floating"
 
     if uses_floating_tag:
         click.echo(f"\nIMPORTANT: This container uses a floating tag (:{current_version})")
-        click.echo(f"   └─ The container will be rolled back using the exact digest from the snapshot")
+        click.echo(f"   └─ The container will be versioned using the exact digest from the snapshot")
         click.echo(f"   └─ However, your .env.manager will still contain: {current_version}")
         click.echo()
         
@@ -375,9 +377,9 @@ def enable_compose(container_name, env_path, version_var, yes):
         
         choice = click.prompt('\nChoice', type=int, default=1)
 
-        if choice == 2:
+        if choice == 1:
             env_path = ".env.manager"
-        elif choice == 1:
+        elif choice == 2:
             env_path = suggested
         else:
             env_path = click.prompt('Enter custom path')
@@ -398,7 +400,6 @@ def enable_compose(container_name, env_path, version_var, yes):
     click.echo()
     
     # Create initial .env.manager
-    current_version = compose_mgr.extract_version_from_image(details['image'])
     env_vars = {version_var: current_version}
     
     try:
@@ -435,11 +436,7 @@ def enable_compose(container_name, env_path, version_var, yes):
     click.echo()
     
     # Instruct user how to execute compose files
-    if compose_service and compose_files:
-        service_files = [f for f in compose_files if f != 'docker-compose.yml']
-        target_file = service_files[0] if service_files else compose_files[0]
-    else:
-        target_file = "your compose file"
+    target_file = "your docker-compose yml"
     
     click.echo(f"1. .env.manager for {target_file} is ready! \n")
     click.echo()
@@ -461,9 +458,9 @@ def enable_compose(container_name, env_path, version_var, yes):
     click.echo()
     click.echo("━" * 60)
     click.echo()
-    click.echo("Compose sync enabled! Future rollbacks will automatically")
+    click.echo("Compose sync enabled! Future version tag changes will automatically")
     click.echo("update .env.manager. You can run docker-compose whenever")
-    click.echo("you want to apply the changes.")
+    click.echo("you want to apply the major change.")
     click.echo()
 
 @cli.command()
@@ -550,9 +547,11 @@ def verify_compose(container_name):
     click.echo(f"Variable {config.version_variable} present in .env.manager")
     
     # Get current container version
-    current_version = tracker.get_current_version(container_name)
+    tag_info = tracker.get_version_info(container_name)
+    current_version = tag_info.tag
+
     if current_version:
-        container_ver = compose_mgr.extract_version_from_image(current_version)
+        container_ver = current_version
         env_ver = env_vars[config.version_variable]
         
         if container_ver == env_ver:
