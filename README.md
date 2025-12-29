@@ -128,6 +128,9 @@ python -m homelab.dashboard.app
 ```
 
 ## Appendix
+**Note:** This is a personal project. Features and functionality may change.
+
+<br>
 
 ### [01] Automated Version Control vs Planned Changes
 **Version Control** - Snapshot, update, and rollback the container state:
@@ -188,9 +191,9 @@ homelab verify-compose immich-server
 - You can run `docker-compose up` without major version conflicts
 
 
-### [03] PostgreSQL Interactions
+### [03] PostgreSQL Management
 
-If you don't want to use commands like `history` or `verify-compose`, you can optionally manually interact with the database
+In addition to commands like `history` or `verify-compose`, you can optionally manually interact with the database
 ```bash
 cd homelab-manager
 docker exec -it homelab_postgres psql -U homelab -d homelab
@@ -222,4 +225,3 @@ ORDER BY container_name;
 
 ---
 
-**Note:** This is a personal project. Features and functionality may change.
