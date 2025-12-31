@@ -32,7 +32,11 @@ def init():
     click.echo("\nCLI and service configs:")
     click.echo("  cp .env.example .env")
     click.echo("  config.py")
-    click.echo("  logging_config.py\n")
+    click.echo("  logging_config.py")
+
+    # Init DB
+    click.echo("\nInitialize database:")
+    click.echo("  homelab init-db\n")
 
     # --- Instructions ---
     click.echo("To enable automatic updates, install the systemd service:")

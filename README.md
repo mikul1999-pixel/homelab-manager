@@ -1,16 +1,26 @@
 # Homelab Manager
 
-Docker container version management and monitoring CLI + API for home labs. Track image versions, rollback updates, and optionally sync with docker-compose files.
+Docker container version management and monitoring tool for home labs. It provides a CLI, API, and background job for tracking image versions, detecting updates, performing rollbacks, and optionally syncing with docker‑compose files.
 
+
+**++ Explore these neat add‑ons:** <br>
+Homelab Manager TUI (Go) **(on the roadmap)**   
+Homelab Manager Web UI (React) **(on the roadmap)** <br>
 
 ## Features
-- Version tracking and history
-- Detect new updates
-- One-click rollbacks
-- Docker compose syncs (optional)
-- Automated updates and health monitoring
-- Config drift detection **(on roadmap)**
-- Dependency management **(on roadmap)**
+
+- Version tracking with history
+- Update detection
+- Container health checks
+- One‑click rollbacks
+- Dependency management **(on the roadmap)**
+
+### Optional Features
+
+- Automated updates with health monitoring and rollbacks
+- docker‑compose file syncing
+- Config drift detection **(on the roadmap)**
+
 
 ## Requirements
 - Python 3.10+
@@ -110,7 +120,7 @@ homelab change-version <container_name> <tag>
 homelab list-version
 ```
 
-#### Automated Checks
+#### Automated Checks (Optional)
 ```bash
 # Enable auto-update (+ health checks) for containers
 homelab auto-update enable <container_name> --interval --health-duration --no-rollback
@@ -158,7 +168,7 @@ homelab list-compose
 
 <br>
 
-### [01] Automated Version Control vs Planned Changes
+### > Automated Version Control vs Planned Changes
 **Version Control** - Snapshot, update, and rollback the container state:
 - Alters the underlying image digest (hash of v2.117.0)
 - Stays on the same major version (v2 → v2 new digest)
@@ -171,7 +181,7 @@ homelab list-compose
 - Alters version control to track (v3 → v3 new digest)
 
 
-### [02] Docker Compose Integration
+### > Docker Compose Integration
 
 Homelab Manager can optionally keep your docker-compose `.env` files in sync with major changes.
 
@@ -217,7 +227,7 @@ homelab verify-compose immich-server
 - You can run `docker-compose up` without major version conflicts
 
 
-### [03] PostgreSQL Management
+### > PostgreSQL Management
 
 In addition to commands like `history` or `verify-compose`, you can optionally manually interact with the database
 ```bash
