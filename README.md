@@ -1,6 +1,6 @@
 # Homelab Manager
 
-Docker container version management and monitoring dashboard for home labs. Track image versions, rollback updates, and optionally sync with docker-compose files.
+Docker container version management and monitoring CLI + API for home labs. Track image versions, rollback updates, and optionally sync with docker-compose files.
 
 
 ## Features
@@ -8,9 +8,9 @@ Docker container version management and monitoring dashboard for home labs. Trac
 - Detect new updates
 - One-click rollbacks
 - Docker compose syncs (optional)
-- Health monitoring dashboards
-- Config drift detection
-- Dependency management
+- Automated updates and health monitoring
+- Config drift detection **(on roadmap)**
+- Dependency management **(on roadmap)**
 
 ## Requirements
 - Python 3.10+
@@ -31,6 +31,9 @@ cd homelab-manager
 python3 -m venv venv
 source venv/bin/activate
 pip install -e ".[dev,dashboard]"
+
+# Init instructions
+homelab init
 ```
 
 
@@ -107,6 +110,34 @@ homelab change-version <container_name> <tag>
 homelab list-version
 ```
 
+#### Automated Checks
+```bash
+# Enable auto-update (+ health checks) for containers
+homelab auto-update enable <container_name> --interval --health-duration --no-rollback
+
+# Check status
+homelab auto-update status
+
+# Test update (dry-run)
+homelab auto-update test <container_name>
+
+# Start scheduler (runs in background). Can also use systemd
+homelab scheduler
+
+# Check logs
+tail -f /var/log/homelab-manager/scheduler.log
+```
+Instead of running the background job within the terminal, you can set it up as a systemd service.
+<br>
+
+install the systemd service:
+```bash
+cd homelab-manager
+sudo cp homelab-manager/src/homelab/scheduler/homelab-scheduler.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now homelab-scheduler.service
+```
+
 #### Compose Integration (Optional)
 ```bash
 # Enable compose sync (one-time setup)
@@ -120,14 +151,6 @@ homelab disable-compose <container_name>
 
 # List all containers with compose sync enabled
 homelab list-compose
-```
-
-### Dashboard
-```bash
-# Start the web dashboard
-python -m homelab.dashboard.app
-
-# Visit http://localhost:8050
 ```
 
 ## Appendix

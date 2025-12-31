@@ -7,6 +7,47 @@ def cli():
     pass
 
 @cli.command()
+def init():
+    """Initialize Homelab Manager and show setup instructions."""
+    import pathlib
+    import os
+
+    SYSTEMD_UNIT_PATH = "homelab-manager/src/homelab/scheduler/homelab-scheduler.service"
+
+    click.echo("\nWelcome to Homelab Manager!")
+    click.echo("\nThis tool helps you:")
+    click.echo("  • Automatically update your containers")
+    click.echo("  • Snapshot and rollback versions safely")
+    click.echo("  • Run scheduled health checks")
+    click.echo("  • Expose an API for the TUI and Web UI\n")
+
+    click.echo("=== Setup Instructions === \n")
+
+    # Database Setup
+    click.echo("Setup PostgreSQL via Docker:")
+    click.echo("  cd homelab-manager")
+    click.echo("  docker-compose up -d")
+
+    # Config files
+    click.echo("\nCLI and service configs:")
+    click.echo("  cp .env.example .env")
+    click.echo("  config.py")
+    click.echo("  logging_config.py\n")
+
+    # --- Instructions ---
+    click.echo("To enable automatic updates, install the systemd service:")
+    click.echo("  cd homelab-manager")
+    click.echo(f"  sudo cp {SYSTEMD_UNIT_PATH} /etc/systemd/system/")
+    click.echo("  sudo systemctl daemon-reload")
+    click.echo("  sudo systemctl enable --now homelab-scheduler.service\n")
+
+    click.echo("You can verify the service with:")
+    click.echo("  sudo systemctl status homelab-scheduler.service\n")
+
+    click.echo("You're all set. Enjoy a safer, smarter homelab!\n")
+
+
+@cli.command()
 def list():
     """List all containers"""
     manager = DockerManager()
@@ -682,6 +723,202 @@ def health(container_name):
     except Exception as e:
         click.echo(f"Error checking health: {e}", err=True)
         raise
+
+
+
+
+@cli.group()
+def auto_update():
+    """Manage automatic updates"""
+    pass
+
+@auto_update.command()
+@click.argument('container_name')
+@click.option('--interval', default=12, help='Check interval in hours')
+@click.option('--health-duration', default=600, help='Health monitoring duration in seconds')
+@click.option('--no-rollback', is_flag=True, help='Disable automatic rollback on failure')
+def enable(container_name, interval, health_duration, no_rollback):
+    """Enable automatic updates for a container"""
+    from homelab.core.models import init_db, AutoUpdateConfig
+    from homelab.config import DATABASE_URL
+    
+    Session = init_db(DATABASE_URL)
+    session = Session()
+    
+    # Check if already exists
+    config = session.query(AutoUpdateConfig)\
+        .filter_by(container_name=container_name)\
+        .first()
+    
+    if config:
+        config.enabled = True
+        config.check_interval_hours = interval
+        config.health_check_duration = health_duration
+        config.auto_rollback = not no_rollback
+        click.echo(f"Updated auto-update config for {container_name}")
+    else:
+        config = AutoUpdateConfig(
+            container_name=container_name,
+            enabled=True,
+            check_interval_hours=interval,
+            health_check_duration=health_duration,
+            auto_rollback=not no_rollback
+        )
+        session.add(config)
+        click.echo(f"Enabled auto-update for {container_name}")
+    
+    session.commit()
+    
+    click.echo(f"\nConfiguration:")
+    click.echo(f"  Check interval: every {interval} hours")
+    click.echo(f"  Health monitoring: {health_duration} seconds")
+    click.echo(f"  Auto-rollback: {'enabled' if not no_rollback else 'disabled'}")
+    click.echo(f"\nThe scheduler will check for updates automatically.")
+
+@auto_update.command()
+@click.argument('container_name')
+def disable(container_name):
+    """Disable automatic updates for a container"""
+    from homelab.core.models import init_db, AutoUpdateConfig
+    from homelab.config import DATABASE_URL
+    
+    Session = init_db(DATABASE_URL)
+    session = Session()
+    
+    config = session.query(AutoUpdateConfig)\
+        .filter_by(container_name=container_name)\
+        .first()
+    
+    if not config:
+        click.echo(f"Auto-update not enabled for {container_name}")
+        return
+    
+    config.enabled = False
+    session.commit()
+    
+    click.echo(f"Disabled auto-update for {container_name}")
+
+@auto_update.command(name='status')
+def status_cmd():
+    """Show auto-update status for all containers"""
+    from homelab.core.models import init_db, AutoUpdateConfig
+    from homelab.config import DATABASE_URL
+    
+    Session = init_db(DATABASE_URL)
+    session = Session()
+    
+    configs = session.query(AutoUpdateConfig).all()
+    
+    if not configs:
+        click.echo("No containers configured for auto-update")
+        return
+    
+    click.echo("\nAuto-Update Status:\n")
+    click.echo(f"{'CONTAINER':<20} {'STATUS':<10} {'INTERVAL':<12} {'LAST CHECKED':<20} {'LAST UPDATED':<20}")
+    click.echo("-" * 90)
+    
+    for config in configs:
+        status = "enabled" if config.enabled else "disabled"
+        interval = f"{config.check_interval_hours}h"
+        last_checked = config.last_checked.strftime('%Y-%m-%d %H:%M') if config.last_checked else 'never'
+        last_updated = config.last_updated.strftime('%Y-%m-%d %H:%M') if config.last_updated else 'never'
+        
+        click.echo(f"{config.container_name:<20} {status:<10} {interval:<12} {last_checked:<20} {last_updated:<20}")
+
+@auto_update.command()
+@click.argument('container_name')
+def test(container_name):
+    """Test update process (dry-run with health check)"""
+    from homelab.core.models import init_db
+    from homelab.core.update_checker import UpdateChecker
+    from homelab.core.version_tracker import VersionTracker
+    from homelab.config import DATABASE_URL
+    from homelab.scheduler.jobs import apply_update_with_monitoring
+    
+    Session = init_db(DATABASE_URL)
+    session = Session()
+    
+    tracker = VersionTracker(session)
+    checker = UpdateChecker()
+    
+    click.echo(f"Testing auto-update for {container_name}...\n")
+    
+    # Check for update
+    click.echo("Checking for updates...")
+    update_info = checker.check_for_update(container_name)
+    
+    if not update_info:
+        click.echo("No update available")
+        return
+    
+    click.echo(f"Update available")
+    click.echo(f"  Current: {update_info['current_digest'][:40]}...")
+    click.echo(f"  Latest:  {update_info['latest_digest'][:40]}...")
+    
+    click.echo(f"\nThis is a test - would normally:")
+    click.echo(f"  1. Create snapshot")
+    click.echo(f"  2. Update container")
+    click.echo(f"  3. Monitor health for 10 minutes")
+    click.echo(f"  4. Rollback if unhealthy")
+    
+    if not click.confirm('\nActually perform update?'):
+        click.echo("Test cancelled")
+        return
+    
+    # Perform update
+    success = apply_update_with_monitoring(
+        container_name=container_name,
+        tracker=tracker,
+        health_check_duration=600,
+        auto_rollback=True
+    )
+    
+    if success:
+        click.echo("\nUpdate successful!")
+    else:
+        click.echo("\nUpdate failed (rolled back)")
+
+@cli.command()
+def scheduler():
+    """Start the background scheduler daemon"""
+    import signal
+    import sys
+    from homelab.scheduler.scheduler import start_scheduler
+    from homelab.config import DATABASE_URL
+    from logging_config import configure_logging
+    
+    # Setup logging
+    configure_logging()
+    logger = logging.getLogger(__name__)
+
+    
+    click.echo("Starting Homelab Manager scheduler...")
+    
+    scheduler = start_scheduler(DATABASE_URL)
+    
+    click.echo("Scheduler started")
+    click.echo("  Checking for updates every 12 hours")
+    click.echo("  Press Ctrl+C to stop")
+    
+    # Handle shutdown
+    def signal_handler(sig, frame):
+        click.echo("\nShutting down scheduler...")
+        scheduler.shutdown()
+        click.echo("Scheduler stopped")
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    # Keep running
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+
+
+
 
 
 if __name__ == '__main__':

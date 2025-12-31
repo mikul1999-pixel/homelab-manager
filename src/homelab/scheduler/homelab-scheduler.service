@@ -1,0 +1,14 @@
+[Unit]
+Description=Homelab Manager Scheduler
+After=network.target docker.service postgresql.service
+
+[Service]
+Type=simple
+User=mikul
+WorkingDirectory=/home/mikul/homelab-manager
+ExecStart=/home/mikul/homelab-manager/venv/bin/python -m homelab.cli.main scheduler
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
