@@ -94,6 +94,9 @@ homelab update <container_name>
 # Update without confirmation
 homelab update <container_name> --force
 
+# Check the health of a container
+homelab health <container_name>
+
 # View major version tag being tracked
 homelab version <container_name>
 

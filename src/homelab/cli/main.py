@@ -664,6 +664,25 @@ def update(container_name, force):
 
     return 0
 
+@cli.command()
+@click.argument('container_name')
+def health(container_name):
+    """Check the health of a container"""
+    from homelab.core.health_checker import HealthChecker
+    
+    health = HealthChecker()
+
+    try:
+        health_result = health.check_container_health(container_name)
+        click.echo(f"Health for {container_name}")
+        click.echo(f"  Running: {health_result['container_running']}")
+        click.echo(f"  Docker Check: {health_result['docker_health']}")
+        click.echo(f"  Port Check: {health_result['port_check']}")
+        click.echo(f"  Overall Healthy: {health_result['overall_healthy']}")
+    except Exception as e:
+        click.echo(f"Error checking health: {e}", err=True)
+        raise
+
 
 if __name__ == '__main__':
     cli()
