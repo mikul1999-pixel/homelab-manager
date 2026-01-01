@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import List
+from typing import List, Optional
 from homelab.api.dependencies import (
     get_docker_manager,
     get_version_tracker,
+    get_stats_manager,
     verify_container_exists
 )
 from homelab.api.models import (
@@ -17,6 +18,7 @@ from homelab.api.models import (
 )
 from homelab.core.docker_manager import DockerManager
 from homelab.core.version_tracker import VersionTracker
+from homelab.core.stats_manager import StatsManager
 
 router = APIRouter()
 
@@ -128,3 +130,102 @@ def change_version_tag(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to change version tag: {str(e)}")
+
+
+#--------- endpoints specific to TUI/UI ---------#
+
+@router.get("/{container_name}/stats")
+def get_container_stats(
+    container_name: str = Depends(verify_container_exists),
+    stats: StatsManager = Depends(get_stats_manager)
+):
+    """Get real-time container resource usage"""
+    try:
+        return stats.get_container_stats(container_name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+
+@router.get("/stats/all")
+def get_all_stats(
+    stats: StatsManager = Depends(get_stats_manager)
+):
+    """Get stats for all running containers"""
+    return {
+        "stats": stats.get_all_container_stats(),
+        "timestamp": datetime.utcnow()
+    }
+
+@router.post("/{container_name}/start")
+def start_container(
+    container_name: str = Depends(verify_container_exists),
+    docker: DockerManager = Depends(get_docker_manager)
+):
+    """Start a stopped container"""
+    try:
+        docker.start_container(container_name)
+        return {
+            "success": True,
+            "container": container_name,
+            "action": "started"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start: {str(e)}")
+
+@router.post("/{container_name}/stop")
+def stop_container(
+    container_name: str = Depends(verify_container_exists),
+    timeout: int = Query(10, ge=1, le=60),
+    docker: DockerManager = Depends(get_docker_manager)
+):
+    """Stop a running container"""
+    try:
+        docker.stop_container(container_name, timeout=timeout)
+        return {
+            "success": True,
+            "container": container_name,
+            "action": "stopped"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to stop: {str(e)}")
+
+@router.post("/{container_name}/restart")
+def restart_container(
+    container_name: str = Depends(verify_container_exists),
+    timeout: int = Query(10, ge=1, le=60),
+    docker: DockerManager = Depends(get_docker_manager)
+):
+    """Restart a container"""
+    try:
+        docker.restart_container(container_name, timeout=timeout)
+        return {
+            "success": True,
+            "container": container_name,
+            "action": "restarted"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to restart: {str(e)}")
+
+@router.get("/{container_name}/logs")
+def get_container_logs(
+    container_name: str = Depends(verify_container_exists),
+    tail: int = Query(100, ge=1, le=1000, description="Number of lines"),
+    since: Optional[str] = Query(None, description="Show logs since timestamp"),
+    docker: DockerManager = Depends(get_docker_manager)
+):
+    """Get container logs"""
+    try:
+        logs = docker.get_container_logs(
+            name=container_name,
+            tail=tail,
+            since=since,
+            timestamps=True
+        )
+        
+        return {
+            "container": container_name,
+            "logs": logs.split('\n') if logs else [],
+            "tail": tail
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get logs: {str(e)}")

@@ -77,7 +77,7 @@ There are a couple daemons that you can run in the background, either through a 
 #### A. CLI commands
 ```homelab scheduler``` runs automated image version checks. + optional: update, health check, rollback
 
-```homelab-api``` 
+```homelab-api``` starts the api on a local port. used for integration with other apps
 
 
 #### B. Systemd Service
@@ -105,6 +105,18 @@ homelab list
 
 # Show detailed container information
 homelab details <container_name>
+
+# Get usage stats
+homelab stats <container_name>
+homelab stats  # All containers
+
+# Standard container control
+homelab start <container_name>
+homelab stop <container_name>
+homelab restart <container_name>
+
+# Get container logs
+homelab logs <container_name> --tail --follow --since
 ```
 
 #### Version Control
@@ -188,6 +200,18 @@ curl http://localhost:3000/api/containers
 
 # Get container details
 curl http://localhost:3000/api/containers/<container>
+
+# Get usage stats
+curl http://localhost:3000/api/containers/<container>/stats
+curl http://localhost:3000/api/containers/stats/all
+
+# Start/stop/restart container
+curl -X POST http://localhost:3000/api/containers/<container>/start
+curl -X POST http://localhost:3000/api/containers/<container>/stop
+curl -X POST http://localhost:3000/api/containers/<container>/restart
+
+# Get container logs
+curl http://localhost:3000/api/containers/<container>/logs?tail=50
 
 # Create snapshot
 curl -X POST http://localhost:3000/api/containers/<container>/snapshot

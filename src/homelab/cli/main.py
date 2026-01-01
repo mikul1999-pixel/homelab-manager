@@ -78,6 +78,137 @@ def details(container_name):
         click.echo(f"  {env}")
 
 @cli.command()
+@click.argument('container_name')
+def start(container_name):
+    """Start a stopped container"""
+    from homelab.core.docker_manager import DockerManager
+    
+    docker = DockerManager()
+    
+    try:
+        docker.start_container(container_name)
+        click.echo(f"Started {container_name}")
+    except Exception as e:
+        click.echo(f"Failed to start {container_name}: {e}", err=True)
+        raise
+
+
+@cli.command()
+@click.argument('container_name')
+@click.option('--timeout', '-t', default=10, help='Seconds to wait before killing')
+def stop(container_name, timeout):
+    """Stop a running container"""
+    from homelab.core.docker_manager import DockerManager
+    
+    docker = DockerManager()
+    
+    try:
+        docker.stop_container(container_name, timeout=timeout)
+        click.echo(f"Stopped {container_name}")
+    except Exception as e:
+        click.echo(f"Failed to stop {container_name}: {e}", err=True)
+        raise
+
+
+@cli.command()
+@click.argument('container_name')
+@click.option('--timeout', '-t', default=10, help='Seconds to wait before killing')
+def restart(container_name, timeout):
+    """Restart a container"""
+    from homelab.core.docker_manager import DockerManager
+    
+    docker = DockerManager()
+    
+    try:
+        docker.restart_container(container_name, timeout=timeout)
+        click.echo(f"Restarted {container_name}")
+    except Exception as e:
+        click.echo(f"Failed to restart {container_name}: {e}", err=True)
+        raise
+
+@cli.command()
+@click.argument('container_name')
+@click.option('--tail', '-n', default=100, help='Number of lines to show')
+@click.option('--follow', '-f', is_flag=True, help='Follow log output')
+@click.option('--since', help='Show logs since timestamp')
+def logs(container_name, tail, follow, since):
+    """Show container logs"""
+    from homelab.core.docker_manager import DockerManager
+    import docker
+    
+    docker_mgr = DockerManager()
+    
+    try:
+        if follow:
+            # Streaming logs
+            container = docker_mgr.client.containers.get(container_name)
+            click.echo(f"Following logs for {container_name} (Ctrl+C to stop)...\n")
+            
+            for line in container.logs(stream=True, follow=True, tail=tail):
+                click.echo(line.decode('utf-8').rstrip())
+        else:
+            # Static logs
+            logs_output = docker_mgr.get_container_logs(
+                name=container_name,
+                tail=tail,
+                since=since
+            )
+            click.echo(logs_output)
+    
+    except KeyboardInterrupt:
+        click.echo("\nStopped following logs")
+    except Exception as e:
+        click.echo(f"Failed to get logs: {e}", err=True)
+        raise
+
+@cli.command()
+@click.argument('container_name', required=False)
+def stats(container_name):
+    """Show container resource usage"""
+    from homelab.core.stats_manager import StatsManager
+    
+    stats_mgr = StatsManager()
+    
+    if container_name:
+        # Single container
+        try:
+            stats = stats_mgr.get_container_stats(container_name)
+            click.echo(f"\n{stats['container']}:")
+            click.echo(f"  CPU:        {stats['cpu_percent']}%")
+            click.echo(f"  Memory:     {stats['memory']['usage_mb']:.1f}MB / {stats['memory']['limit_mb']:.1f}MB ({stats['memory']['percent']:.1f}%)")
+            click.echo(f"  Network RX: {stats['network']['rx_mb']:.2f}MB")
+            click.echo(f"  Network TX: {stats['network']['tx_mb']:.2f}MB")
+            click.echo(f"  Disk Read:  {stats['block_io']['read_mb']:.2f}MB")
+            click.echo(f"  Disk Write: {stats['block_io']['write_mb']:.2f}MB")
+        except Exception as e:
+            click.echo(f"✗ Failed to get stats: {e}", err=True)
+            raise
+    else:
+        # All containers
+        try:
+            all_stats = stats_mgr.get_all_container_stats()
+            
+            click.echo(f"\n{'CONTAINER':<20} {'CPU':<8} {'MEMORY':<25} {'NET RX':<12} {'NET TX':<12}")
+            click.echo("-" * 85)
+            
+            for s in all_stats:
+                if 'error' in s:
+                    click.echo(f"{s['container']:<20} {'ERROR':<8}")
+                    continue
+                
+                mem_str = f"{s['memory']['usage_mb']:.0f}MB / {s['memory']['limit_mb']:.0f}MB"
+                click.echo(
+                    f"{s['container']:<20} "
+                    f"{s['cpu_percent']:<7.1f}% "
+                    f"{mem_str:<25} "
+                    f"{s['network']['rx_mb']:<11.2f}M "
+                    f"{s['network']['tx_mb']:<11.2f}M"
+                )
+        except Exception as e:
+            click.echo(f"Failed to get stats: {e}", err=True)
+            raise
+
+@cli.command()
 def init_db():
     """Initialize the database schema"""
     from homelab.core.models import init_db as initialize_database

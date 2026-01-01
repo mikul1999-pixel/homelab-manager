@@ -6,6 +6,7 @@ from homelab.core.version_tracker import VersionTracker
 from homelab.core.update_checker import UpdateChecker
 from homelab.core.update_manager import UpdateManager
 from homelab.core.health_checker import HealthChecker
+from homelab.core.stats_manager import StatsManager
 from homelab.config import DATABASE_URL
 
 # Database session
@@ -38,6 +39,10 @@ def get_update_manager(db: Session = Depends(get_db)):
 def get_health_checker():
     """Get HealthChecker instance"""
     return HealthChecker()
+
+def get_stats_manager():
+    """Get StatsManager instance"""
+    return StatsManager()
 
 def verify_container_exists(container_name: str, docker: DockerManager = Depends(get_docker_manager)):
     """Verify container exists, raise 404 if not"""
