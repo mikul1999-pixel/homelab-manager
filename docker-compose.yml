@@ -19,21 +19,6 @@ services:
     networks:
       - homelab-network
 
-  # Add dashboard here later
-  # dashboard:
-  #   build: .
-  #   container_name: homelab_dashboard
-  #   restart: unless-stopped
-  #   ports:
-  #     - "${DASHBOARD_PORT:-8050}:8050"
-  #   environment:
-  #     DATABASE_URL: postgresql://${POSTGRES_USER:-homelab}:${POSTGRES_PASSWORD:-homelab}@postgres:5432/${POSTGRES_DB:-homelab}
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   networks:
-  #     - homelab-network
-
 volumes:
   postgres-data:
     driver: local
