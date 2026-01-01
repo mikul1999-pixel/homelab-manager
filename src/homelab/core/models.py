@@ -52,6 +52,7 @@ class AutoUpdateConfig(Base):
     check_interval_hours = Column(Integer, default=12)
     health_check_duration = Column(Integer, default=600)  # seconds
     auto_rollback = Column(Boolean, default=True)
+    check_only = Column(Boolean, default=True)
     last_checked = Column(DateTime, nullable=True)
     last_updated = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -40,7 +40,7 @@ git clone https://github.com/mikul1999-pixel/homelab-manager.git
 cd homelab-manager
 python3 -m venv venv
 source venv/bin/activate
-pip install -e ".[dev,dashboard]"
+pip install -e ".[dev]"
 
 # Init instructions
 homelab init
@@ -94,8 +94,6 @@ homelab history <container_name>
 
 # Rollback to specific snapshot
 homelab rollback <container_name> <snapshot_id>
-
-# Rollback without confirmation
 homelab rollback <container_name> <snapshot_id> --force
 
 # Check if an image update is needed
@@ -103,8 +101,6 @@ homelab check-update <container_name>
 
 # Update to newest image version
 homelab update <container_name>
-
-# Update without confirmation
 homelab update <container_name> --force
 
 # Check the health of a container
@@ -123,19 +119,24 @@ homelab list-version
 #### Automated Checks (Optional)
 ```bash
 # Enable auto-update (+ health checks) for containers
-homelab auto-update enable <container_name> --interval --health-duration --no-rollback
+homelab auto-update enable <container_name> --interval --health-duration --no-rollback --check-only
+
+# Disable auto-update. Run 'auto-update enable' again to reset
+homelab auto-update disable <container_name>
 
 # Check status
 homelab auto-update status
 
-# Test update (dry-run)
+# Test update job (dry-run)
 homelab auto-update test <container_name>
+homelab auto-update test <container_name> --force
 
 # Start scheduler (runs in background). Can also use systemd
 homelab scheduler
 
 # Check logs
-tail -f /var/log/homelab-manager/scheduler.log
+homelab logs
+homelab logs -f
 ```
 Instead of running the background job within the terminal, you can set it up as a systemd service.
 <br>

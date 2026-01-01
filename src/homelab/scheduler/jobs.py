@@ -15,7 +15,7 @@ def check_updates_job(database_url: str):
     
     Session = init_db(database_url)
     session = Session()
-    checker = UpdateChecker()
+    checker = UpdateChecker(session)
     tracker = VersionTracker(session)
     
     # Get all containers with auto-update enabled
@@ -26,7 +26,7 @@ def check_updates_job(database_url: str):
     if not auto_update_containers:
         logger.info("No containers configured for auto-update")
         return
-    
+
     logger.info(f"Checking {len(auto_update_containers)} containers for updates")
     
     for config in auto_update_containers:
@@ -47,12 +47,13 @@ def check_updates_job(database_url: str):
             logger.info(f"    Latest:  {update_info['latest_digest'][:20]}...")
             
             # Apply update with health monitoring
-            success = apply_update_with_monitoring(
-                container_name=config.container_name,
-                tracker=tracker,
-                health_check_duration=config.health_check_duration,
-                auto_rollback=config.auto_rollback
-            )
+            if not config.check_only: 
+                success = apply_update_with_monitoring(
+                    container_name=config.container_name,
+                    tracker=tracker,
+                    health_check_duration=config.health_check_duration,
+                    auto_rollback=config.auto_rollback
+                )
             
             # Update config
             config.last_checked = datetime.utcnow()
@@ -87,6 +88,13 @@ def apply_update_with_monitoring(
         if "error" in result:
             logger.error(f"Error: {update_result['error']}")
             return False
+
+    # Success summary
+    logger.info(f"\nSuccessfully updated {container_name}")
+    logger.info(f"\nSnapshots created:")
+    logger.info(f"  • Before update: ID {update_result['before_snapshot']}")
+    logger.info(f"  • After update:  ID {update_result['after_snapshot']}")
+    logger.info(f"\n")
         
     # Step 2: Health monitoring
     logger.info(f"  Monitoring health for {health_check_duration} seconds...")
