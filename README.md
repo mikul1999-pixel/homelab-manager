@@ -26,23 +26,23 @@ Homelab Manager Web UI (React) **(on the roadmap)** <br>
 - Python 3.10+
 - Docker (with Docker Compose)
 - PostgreSQL 14+
+- uv (instead of pip)
+
 
 ## Installation
-
 
 ```bash
 # Install dependencies
 sudo apt update
-sudo apt install python3-pip python3-venv docker.io
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Setup project
 git clone https://github.com/mikul1999-pixel/homelab-manager.git
 cd homelab-manager
-python3 -m venv venv
-source venv/bin/activate
-pip install -e ".[dev]"
+uv sync
+source .venv/bin/activate
 
-# Init instructions
+# Instructions
 homelab init
 ```
 

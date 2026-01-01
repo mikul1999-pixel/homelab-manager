@@ -19,7 +19,7 @@ def init():
     click.echo("  • Automatically update your containers")
     click.echo("  • Snapshot and rollback versions safely")
     click.echo("  • Run scheduled health checks")
-    click.echo("  • Expose an API for the TUI and Web UI\n")
+    click.echo("  • Expose an API for app integration\n")
 
     click.echo("=== Setup Instructions === \n")
 
@@ -38,15 +38,20 @@ def init():
     click.echo("\nInitialize database:")
     click.echo("  homelab init-db\n")
 
+
     # --- Instructions ---
-    click.echo("To enable automatic updates, install the systemd service:")
-    click.echo("  cd homelab-manager")
-    click.echo(f"  sudo cp {SYSTEMD_UNIT_PATH} /etc/systemd/system/")
-    click.echo("  sudo systemctl daemon-reload")
-    click.echo("  sudo systemctl enable --now homelab-scheduler.service\n")
+    click.echo("*CLI: ready to go! run 'homelab' for help")
+    click.echo("*API: either run 'homelab-api' or move homelab-api.service to /etc/systemd/system/")
+    click.echo("*Auto-update-check: either run 'homelab scheduler' or move homelab-scheduler.service to /etc/systemd/system/")
+
+    click.echo("    To run the systemd service:")
+    click.echo("      cd homelab-manager")
+    click.echo(f"      sudo cp <path/*.service> /etc/systemd/system/")
+    click.echo("      sudo systemctl daemon-reload")
+    click.echo("      sudo systemctl enable --now <filename.service>\n")
 
     click.echo("You can verify the service with:")
-    click.echo("  sudo systemctl status homelab-scheduler.service\n")
+    click.echo("  sudo systemctl status <filename.service>\n")
 
     click.echo("You're all set. Enjoy a safer, smarter homelab!\n")
 
