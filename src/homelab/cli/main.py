@@ -92,7 +92,6 @@ def start(container_name):
         click.echo(f"Failed to start {container_name}: {e}", err=True)
         raise
 
-
 @cli.command()
 @click.argument('container_name')
 @click.option('--timeout', '-t', default=10, help='Seconds to wait before killing')
