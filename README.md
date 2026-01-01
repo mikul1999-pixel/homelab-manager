@@ -71,9 +71,32 @@ Initialize database:
 homelab init-db
 ```
 
-## Usage
+## Background Jobs
+There are a couple daemons that you can run in the background, either through a CLI command or as a systemd service
 
-### CLI Commands
+#### A. CLI commands
+```homelab scheduler``` runs automated image version checks. + optional: update, health check, rollback
+
+```homelab-api``` 
+
+
+#### B. Systemd Service
+Instead of running background jobs within the terminal, you can set up systemd services.
+<br>
+
+Included example files: <br>
+```homelab-scheduler.service```, 
+```homelab-api.service```
+
+install systemd services:
+```bash
+cd homelab-manager
+sudo cp <path/*.service> /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now <filename.service>
+```
+
+## CLI Commands
 
 #### Container Management
 ```bash
@@ -138,16 +161,6 @@ homelab scheduler
 homelab logs
 homelab logs -f
 ```
-Instead of running the background job within the terminal, you can set it up as a systemd service.
-<br>
-
-install the systemd service:
-```bash
-cd homelab-manager
-sudo cp homelab-manager/src/homelab/scheduler/homelab-scheduler.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now homelab-scheduler.service
-```
 
 #### Compose Integration (Optional)
 ```bash
@@ -162,6 +175,60 @@ homelab disable-compose <container_name>
 
 # List all containers with compose sync enabled
 homelab list-compose
+```
+
+## API Endpoints
+
+#### Example: Local routes, port 3000 
+
+```/api/containers```
+```bash
+# List containers
+curl http://localhost:3000/api/containers
+
+# Get container details
+curl http://localhost:3000/api/containers/<container>
+
+# Create snapshot
+curl -X POST http://localhost:3000/api/containers/<container>/snapshot
+
+# Get history
+curl http://localhost:3000/api/containers/<container>/history
+
+# Rollback
+curl -X POST http://localhost:3000/api/containers/<container>/rollback \
+  -H "Content-Type: application/json" \
+  -d '{"snapshot_id": 5}'
+
+# Check health
+curl http://localhost:3000/api/containers/<container>/health
+```
+
+```/api/updates```
+```bash
+# Check for update
+curl http://localhost:3000/api/updates/<container>/check
+
+# Perform an update
+curl -X POST http://localhost:3000/api/updates/<container>/update
+
+# Get auto-update config
+curl http://localhost:3000/api/updates/<container>/auto-update
+
+# Configure auto-update
+curl -X POST http://localhost:3000/api/updates/<container>/auto-update
+```
+
+```/api/snapshots```
+```bash
+# List snapshots
+curl http://localhost:3000/api/snapshots
+
+# Get a snapshot
+curl http://localhost:3000/api/snapshots/<snapshot_id>
+
+# Delete a snapshot
+curl -X DELETE http://localhost:3000/api/snapshots/<snapshot_id>
 ```
 
 ## Appendix
