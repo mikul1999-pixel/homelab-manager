@@ -224,6 +224,11 @@ curl -X POST http://localhost:3000/api/containers/<container>/rollback \
   -H "Content-Type: application/json" \
   -d '{"snapshot_id": 5}'
 
+# Change major version tag
+curl -X POST http://localhost:3000/api/containers/<container>/version-tag \
+  -H "Content-Type: application/json" \
+  -d '{"tag": "v2"}'
+
 # Check health
 curl http://localhost:3000/api/containers/<container>/health
 ```
