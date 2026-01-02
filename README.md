@@ -2,10 +2,8 @@
 
 Docker container version management and monitoring tool for home labs. It provides a CLI, API, and background job for tracking image versions, detecting updates, performing rollbacks, and optionally syncing with docker‑compose files.
 
-
-**++ Explore these neat add‑ons:** <br>
-Homelab Manager TUI (Go) **(on the roadmap)**   
-Homelab Manager Web UI (React) **(on the roadmap)** <br>
+**++ check out the TUI [here](https://github.com/mikul1999-pixel/homelab-tui)**   
+ <br>
 
 ## Features
 
@@ -192,6 +190,10 @@ homelab list-compose
 ## API Endpoints
 
 #### Example: Local routes, port 3000 
+```bash
+# Start api (runs in background). Can also use systemd
+homelab-api
+```
 
 ```/api/containers```
 ```bash
