@@ -7,6 +7,56 @@ def cli():
     pass
 
 @cli.command()
+def init():
+    """Initialize Homelab Manager and show setup instructions."""
+    import pathlib
+    import os
+
+    SYSTEMD_UNIT_PATH = "homelab-manager/src/homelab/scheduler/homelab-scheduler.service"
+
+    click.echo("\nWelcome to Homelab Manager!")
+    click.echo("\nThis tool helps you:")
+    click.echo("  • Automatically update your containers")
+    click.echo("  • Snapshot and rollback versions safely")
+    click.echo("  • Run scheduled health checks")
+    click.echo("  • Expose an API for app integration\n")
+
+    click.echo("=== Setup Instructions === \n")
+
+    # Database Setup
+    click.echo("Setup PostgreSQL via Docker:")
+    click.echo("  cd homelab-manager")
+    click.echo("  docker-compose up -d")
+
+    # Config files
+    click.echo("\nCLI and service configs:")
+    click.echo("  cp .env.example .env")
+    click.echo("  config.py")
+    click.echo("  logging_config.py")
+
+    # Init DB
+    click.echo("\nInitialize database:")
+    click.echo("  homelab init-db\n")
+
+
+    # --- Instructions ---
+    click.echo("*CLI: ready to go! run 'homelab' for help")
+    click.echo("*API: either run 'homelab-api' or move homelab-api.service to /etc/systemd/system/")
+    click.echo("*Auto-update-check: either run 'homelab scheduler' or move homelab-scheduler.service to /etc/systemd/system/")
+
+    click.echo("    To run the systemd service:")
+    click.echo("      cd homelab-manager")
+    click.echo(f"      sudo cp <path/*.service> /etc/systemd/system/")
+    click.echo("      sudo systemctl daemon-reload")
+    click.echo("      sudo systemctl enable --now <filename.service>\n")
+
+    click.echo("You can verify the service with:")
+    click.echo("  sudo systemctl status <filename.service>\n")
+
+    click.echo("You're all set. Enjoy a safer, smarter homelab!\n")
+
+
+@cli.command()
 def list():
     """List all containers"""
     manager = DockerManager()
@@ -31,6 +81,136 @@ def details(container_name):
     click.echo(f"\nEnvironment Variables:")
     for env in details['env_vars']:
         click.echo(f"  {env}")
+
+@cli.command()
+@click.argument('container_name')
+def start(container_name):
+    """Start a stopped container"""
+    from homelab.core.docker_manager import DockerManager
+    
+    docker = DockerManager()
+    
+    try:
+        docker.start_container(container_name)
+        click.echo(f"Started {container_name}")
+    except Exception as e:
+        click.echo(f"Failed to start {container_name}: {e}", err=True)
+        raise
+
+@cli.command()
+@click.argument('container_name')
+@click.option('--timeout', '-t', default=10, help='Seconds to wait before killing')
+def stop(container_name, timeout):
+    """Stop a running container"""
+    from homelab.core.docker_manager import DockerManager
+    
+    docker = DockerManager()
+    
+    try:
+        docker.stop_container(container_name, timeout=timeout)
+        click.echo(f"Stopped {container_name}")
+    except Exception as e:
+        click.echo(f"Failed to stop {container_name}: {e}", err=True)
+        raise
+
+
+@cli.command()
+@click.argument('container_name')
+@click.option('--timeout', '-t', default=10, help='Seconds to wait before killing')
+def restart(container_name, timeout):
+    """Restart a container"""
+    from homelab.core.docker_manager import DockerManager
+    
+    docker = DockerManager()
+    
+    try:
+        docker.restart_container(container_name, timeout=timeout)
+        click.echo(f"Restarted {container_name}")
+    except Exception as e:
+        click.echo(f"Failed to restart {container_name}: {e}", err=True)
+        raise
+
+@cli.command()
+@click.argument('container_name')
+@click.option('--tail', '-n', default=100, help='Number of lines to show')
+@click.option('--follow', '-f', is_flag=True, help='Follow log output')
+@click.option('--since', help='Show logs since timestamp')
+def logs(container_name, tail, follow, since):
+    """Show container logs"""
+    from homelab.core.docker_manager import DockerManager
+    import docker
+    
+    docker_mgr = DockerManager()
+    
+    try:
+        if follow:
+            # Streaming logs
+            container = docker_mgr.client.containers.get(container_name)
+            click.echo(f"Following logs for {container_name} (Ctrl+C to stop)...\n")
+            
+            for line in container.logs(stream=True, follow=True, tail=tail):
+                click.echo(line.decode('utf-8').rstrip())
+        else:
+            # Static logs
+            logs_output = docker_mgr.get_container_logs(
+                name=container_name,
+                tail=tail,
+                since=since
+            )
+            click.echo(logs_output)
+    
+    except KeyboardInterrupt:
+        click.echo("\nStopped following logs")
+    except Exception as e:
+        click.echo(f"Failed to get logs: {e}", err=True)
+        raise
+
+@cli.command()
+@click.argument('container_name', required=False)
+def stats(container_name):
+    """Show container resource usage"""
+    from homelab.core.stats_manager import StatsManager
+    
+    stats_mgr = StatsManager()
+    
+    if container_name:
+        # Single container
+        try:
+            stats = stats_mgr.get_container_stats(container_name)
+            click.echo(f"\n{stats['container']}:")
+            click.echo(f"  CPU:        {stats['cpu_percent']}%")
+            click.echo(f"  Memory:     {stats['memory']['usage_mb']:.1f}MB / {stats['memory']['limit_mb']:.1f}MB ({stats['memory']['percent']:.1f}%)")
+            click.echo(f"  Network RX: {stats['network']['rx_mb']:.2f}MB")
+            click.echo(f"  Network TX: {stats['network']['tx_mb']:.2f}MB")
+            click.echo(f"  Disk Read:  {stats['block_io']['read_mb']:.2f}MB")
+            click.echo(f"  Disk Write: {stats['block_io']['write_mb']:.2f}MB")
+        except Exception as e:
+            click.echo(f"✗ Failed to get stats: {e}", err=True)
+            raise
+    else:
+        # All containers
+        try:
+            all_stats = stats_mgr.get_all_container_stats()
+            
+            click.echo(f"\n{'CONTAINER':<20} {'CPU':<8} {'MEMORY':<25} {'NET RX':<12} {'NET TX':<12}")
+            click.echo("-" * 85)
+            
+            for s in all_stats:
+                if 'error' in s:
+                    click.echo(f"{s['container']:<20} {'ERROR':<8}")
+                    continue
+                
+                mem_str = f"{s['memory']['usage_mb']:.0f}MB / {s['memory']['limit_mb']:.0f}MB"
+                click.echo(
+                    f"{s['container']:<20} "
+                    f"{s['cpu_percent']:<7.1f}% "
+                    f"{mem_str:<25} "
+                    f"{s['network']['rx_mb']:<11.2f}M "
+                    f"{s['network']['tx_mb']:<11.2f}M"
+                )
+        except Exception as e:
+            click.echo(f"Failed to get stats: {e}", err=True)
+            raise
 
 @cli.command()
 def init_db():
@@ -663,6 +843,242 @@ def update(container_name, force):
     click.echo(f"  homelab rollback {container_name} {result['before_snapshot']}")
 
     return 0
+
+@cli.command()
+@click.argument('container_name')
+def health(container_name):
+    """Check the health of a container"""
+    from homelab.core.health_checker import HealthChecker
+    
+    health = HealthChecker()
+
+    try:
+        health_result = health.check_container_health(container_name)
+        click.echo(f"Health for {container_name}")
+        click.echo(f"  Running: {health_result['container_running']}")
+        click.echo(f"  Docker Check: {health_result['docker_health']}")
+        click.echo(f"  Port Check: {health_result['port_check']}")
+        click.echo(f"  Overall Healthy: {health_result['overall_healthy']}")
+    except Exception as e:
+        click.echo(f"Error checking health: {e}", err=True)
+        raise
+
+
+
+
+@cli.group()
+def auto_update():
+    """Manage automatic updates"""
+    pass
+
+@auto_update.command()
+@click.argument('container_name')
+@click.option('--interval', default=12, help='Check interval in hours')
+@click.option('--health-duration', default=600, help='Health monitoring duration in seconds')
+@click.option('--no-rollback', is_flag=True, help='Disable automatic rollback on failure')
+@click.option('--check-only', is_flag=True, help='Disable automatic execution of update')
+def enable(container_name, interval, health_duration, no_rollback, check_only):
+    """Enable automatic updates for a container"""
+    from homelab.core.models import init_db, AutoUpdateConfig
+    from homelab.config import DATABASE_URL
+    
+    Session = init_db(DATABASE_URL)
+    session = Session()
+    
+    # Check if already exists
+    config = session.query(AutoUpdateConfig)\
+        .filter_by(container_name=container_name)\
+        .first()
+    
+    if config:
+        config.enabled = True
+        config.check_interval_hours = interval
+        config.health_check_duration = health_duration
+        config.auto_rollback = not no_rollback
+        config.check_only = check_only
+        click.echo(f"Updated auto-update config for {container_name}")
+    else:
+        config = AutoUpdateConfig(
+            container_name=container_name,
+            enabled=True,
+            check_interval_hours=interval,
+            health_check_duration=health_duration,
+            auto_rollback=not no_rollback,
+            check_only=check_only
+        )
+        session.add(config)
+        click.echo(f"Enabled auto-update for {container_name}")
+    
+    session.commit()
+    
+    click.echo(f"\nConfiguration:")
+    click.echo(f"  Check interval: every {interval} hours")
+    click.echo(f"  Health monitoring: {health_duration} seconds")
+    click.echo(f"  Auto-rollback: {'enabled' if not no_rollback else 'disabled'}")
+    click.echo(f"  Check-only: {'enabled' if check_only else 'disabled'}")
+    click.echo(f"\nThe scheduler will check for updates automatically.")
+
+@auto_update.command()
+@click.argument('container_name')
+def disable(container_name):
+    """Disable automatic updates for a container"""
+    from homelab.core.models import init_db, AutoUpdateConfig
+    from homelab.config import DATABASE_URL
+    
+    Session = init_db(DATABASE_URL)
+    session = Session()
+    
+    config = session.query(AutoUpdateConfig)\
+        .filter_by(container_name=container_name)\
+        .first()
+    
+    if not config:
+        click.echo(f"Auto-update not enabled for {container_name}")
+        return
+    
+    config.enabled = False
+    session.commit()
+    
+    click.echo(f"Disabled auto-update for {container_name}")
+
+@auto_update.command(name='status')
+def status_cmd():
+    """Show auto-update status for all containers"""
+    from homelab.core.models import init_db, AutoUpdateConfig
+    from homelab.config import DATABASE_URL
+    
+    Session = init_db(DATABASE_URL)
+    session = Session()
+    
+    configs = session.query(AutoUpdateConfig).all()
+    
+    if not configs:
+        click.echo("No containers configured for auto-update")
+        return
+    
+    click.echo("\nAuto-Update Status:\n")
+    click.echo(f"{'CONTAINER':<20} {'STATUS':<10} {'JOB':<10} {'INTERVAL':<12} {'LAST CHECKED':<20} {'LAST UPDATED':<20}")
+    click.echo("-" * 90)
+    
+    for config in configs:
+        status = "enabled" if config.enabled else "disabled"
+        job = "check-only" if config.check_only else "update"
+        interval = f"{config.check_interval_hours}h"
+        last_checked = config.last_checked.strftime('%Y-%m-%d %H:%M') if config.last_checked else 'never'
+        last_updated = config.last_updated.strftime('%Y-%m-%d %H:%M') if config.last_updated else 'never'
+        
+        click.echo(f"{config.container_name:<20} {status:<10} {job:<10} {interval:<12} {last_checked:<20} {last_updated:<20}")
+
+@auto_update.command()
+@click.argument('container_name')
+@click.option('--force', '-f', is_flag=True, help='Skip confirmation')
+def test(container_name, force):
+    """Test update process (dry-run with health check)"""
+    from homelab.config import DATABASE_URL
+    from homelab.core.models import init_db, AutoUpdateConfig
+    from homelab.scheduler.jobs import check_updates_job
+    from homelab.core.version_tracker import VersionTracker
+
+    Session = init_db(DATABASE_URL)
+    session = Session()
+    tracker = VersionTracker(session)
+    
+    click.echo(f"Testing auto-update for {container_name}...\n")
+
+    auto_update_config = (
+        session.query(AutoUpdateConfig)
+        .filter_by(container_name=container_name, enabled=True)
+        .first()
+    )
+
+    update_flag = bool(auto_update_config and not auto_update_config.check_only)
+    
+    # Confirm unless --force
+    if not force:
+        click.echo()
+        if not click.confirm('Continue with update test?'):
+            click.echo("Test cancelled")
+            return 0
+    
+    # Perform update
+    if update_flag: 
+        success = apply_update_with_monitoring(
+            container_name = container_name,
+            tracker = tracker,
+            health_check_duration = 600,
+            auto_rollback = True
+        ) 
+    else: 
+        success = False
+    
+    if success:
+        click.echo("\nUpdate successful!")
+    else:
+        click.echo("\nUpdate failed or not tested")
+
+@cli.command()
+def scheduler():
+    """Start the background scheduler daemon"""
+    import signal
+    import sys
+    import time
+    from homelab.scheduler.scheduler import start_scheduler
+    from homelab.config import DATABASE_URL
+    from homelab.logging_config import logging, setup_logging
+    
+    # Setup logging
+    setup_logging()
+    logger = logging.getLogger(__name__)
+
+    
+    click.echo("Starting Homelab Manager scheduler...")
+    
+    scheduler = start_scheduler(DATABASE_URL)
+    
+    click.echo("Scheduler started")
+    click.echo("  Checking for updates every 12 hours")
+    click.echo("  Press Ctrl+C to stop")
+    
+    # Handle shutdown
+    def signal_handler(sig, frame):
+        click.echo("\nShutting down scheduler...")
+        scheduler.shutdown()
+        click.echo("Scheduler stopped")
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    # Keep running
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+
+@cli.command()
+@click.option("--follow", "-f", is_flag=True, help="Stream logs in real time")
+def logs(follow):
+    """Read Homelab Manager logs"""
+    import time
+    from homelab.logging_config import os, get_default_log_path
+
+    log_file = get_default_log_path()
+
+    if follow:
+        # Stream like tail -f
+        with open(log_file, "r") as f:
+            f.seek(0, os.SEEK_END)
+            while True:
+                line = f.readline()
+                if line:
+                    click.echo(line, nl=False)
+                else:
+                    time.sleep(0.2)
+    else:
+        click.echo(open(log_file).read())
+
+
 
 
 if __name__ == '__main__':

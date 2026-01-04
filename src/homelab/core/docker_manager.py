@@ -73,6 +73,47 @@ class DockerManager:
             'compose_files': compose_files,
             'compose_service': compose_service,
         }
+
+    def start_container(self, name: str) -> None:
+        """Start a stopped container"""
+        container = self.client.containers.get(name)
+        container.start()
+    
+    def stop_container(self, name: str, timeout: int = 10) -> None:
+        """Stop a running container"""
+        container = self.client.containers.get(name)
+        container.stop(timeout=timeout)
+    
+    def restart_container(self, name: str, timeout: int = 10) -> None:
+        """Restart a container"""
+        container = self.client.containers.get(name)
+        container.restart(timeout=timeout)
+    
+    def get_container_logs(
+        self, 
+        name: str, 
+        tail: int = 100, 
+        since: Optional[str] = None,
+        timestamps: bool = True
+    ) -> str:
+        """Get logs from a container"""
+        container = self.client.containers.get(name)
+        
+        kwargs = {
+            'tail': tail,
+            'timestamps': timestamps
+        }
+        
+        if since:
+            kwargs['since'] = since
+        
+        logs = container.logs(**kwargs)
+        
+        # Decode bytes to string
+        if isinstance(logs, bytes):
+            return logs.decode('utf-8')
+        
+        return logs
     
     def recreate_container(self, name: str, image: str, config: Dict, image_digest: Optional[str] = None) -> None:
         """Recreate a container with specific image and config (core rollback mechanism)"""

@@ -43,6 +43,21 @@ class ComposeConfig(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class AutoUpdateConfig(Base):
+    __tablename__ = 'auto_update_config'
+    
+    id = Column(Integer, primary_key=True)
+    container_name = Column(String, unique=True, nullable=False)
+    enabled = Column(Boolean, default=True)
+    check_interval_hours = Column(Integer, default=12)
+    health_check_duration = Column(Integer, default=600)  # seconds
+    auto_rollback = Column(Boolean, default=True)
+    check_only = Column(Boolean, default=True)
+    last_checked = Column(DateTime, nullable=True)
+    last_updated = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 def init_db(db_url: str = None):
     """Initialize database"""
     from homelab.config import DATABASE_URL

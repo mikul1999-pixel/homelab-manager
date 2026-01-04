@@ -1,36 +1,47 @@
 # Homelab Manager
 
-Docker container version management and monitoring dashboard for home labs. Track image versions, rollback updates, and optionally sync with docker-compose files.
+Docker container version management and monitoring tool for home labs. It provides a CLI, API, and background job for tracking image versions, detecting updates, performing rollbacks, and optionally syncing with docker‑compose files.
 
+**++ check out the TUI [here](https://github.com/mikul1999-pixel/homelab-tui)**   
+ <br>
 
 ## Features
-- Version tracking and history
-- Detect new updates
-- One-click rollbacks
-- Docker compose syncs (optional)
-- Health monitoring dashboards
-- Config drift detection
-- Dependency management
+
+- Version tracking with history
+- Update detection
+- Container health checks
+- One‑click rollbacks
+- Dependency management **(on the roadmap)**
+
+### Optional Features
+
+- Automated updates with health monitoring and rollbacks
+- docker‑compose file syncing
+- Config drift detection **(on the roadmap)**
+
 
 ## Requirements
 - Python 3.10+
 - Docker (with Docker Compose)
 - PostgreSQL 14+
+- uv (instead of pip)
+
 
 ## Installation
-
 
 ```bash
 # Install dependencies
 sudo apt update
-sudo apt install python3-pip python3-venv docker.io
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Setup project
 git clone https://github.com/mikul1999-pixel/homelab-manager.git
 cd homelab-manager
-python3 -m venv venv
-source venv/bin/activate
-pip install -e ".[dev,dashboard]"
+uv sync
+source .venv/bin/activate
+
+# Instructions
+homelab init
 ```
 
 
@@ -58,9 +69,32 @@ Initialize database:
 homelab init-db
 ```
 
-## Usage
+## Background Jobs
+There are a couple daemons that you can run in the background, either through a CLI command or as a systemd service
 
-### CLI Commands
+#### A. CLI commands
+```homelab scheduler``` runs automated image version checks. + optional: update, health check, rollback
+
+```homelab-api``` starts the api on a local port. used for integration with other apps
+
+
+#### B. Systemd Service
+Instead of running background jobs within the terminal, you can set up systemd services.
+<br>
+
+Included example files: <br>
+```homelab-scheduler.service```, 
+```homelab-api.service```
+
+install systemd services:
+```bash
+cd homelab-manager
+sudo cp <path/*.service> /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now <filename.service>
+```
+
+## CLI Commands
 
 #### Container Management
 ```bash
@@ -69,6 +103,18 @@ homelab list
 
 # Show detailed container information
 homelab details <container_name>
+
+# Get usage stats
+homelab stats <container_name>
+homelab stats  # All containers
+
+# Standard container control
+homelab start <container_name>
+homelab stop <container_name>
+homelab restart <container_name>
+
+# Get container logs
+homelab logs <container_name> --tail --follow --since
 ```
 
 #### Version Control
@@ -81,8 +127,6 @@ homelab history <container_name>
 
 # Rollback to specific snapshot
 homelab rollback <container_name> <snapshot_id>
-
-# Rollback without confirmation
 homelab rollback <container_name> <snapshot_id> --force
 
 # Check if an image update is needed
@@ -90,9 +134,10 @@ homelab check-update <container_name>
 
 # Update to newest image version
 homelab update <container_name>
-
-# Update without confirmation
 homelab update <container_name> --force
+
+# Check the health of a container
+homelab health <container_name>
 
 # View major version tag being tracked
 homelab version <container_name>
@@ -102,6 +147,29 @@ homelab change-version <container_name> <tag>
 
 # List all containers and their version tag
 homelab list-version
+```
+
+#### Automated Checks (Optional)
+```bash
+# Enable auto-update (+ health checks) for containers
+homelab auto-update enable <container_name> --interval --health-duration --no-rollback --check-only
+
+# Disable auto-update. Run 'auto-update enable' again to reset
+homelab auto-update disable <container_name>
+
+# Check status
+homelab auto-update status
+
+# Test update job (dry-run)
+homelab auto-update test <container_name>
+homelab auto-update test <container_name> --force
+
+# Start scheduler (runs in background). Can also use systemd
+homelab scheduler
+
+# Check logs
+homelab logs
+homelab logs -f
 ```
 
 #### Compose Integration (Optional)
@@ -119,12 +187,79 @@ homelab disable-compose <container_name>
 homelab list-compose
 ```
 
-### Dashboard
-```bash
-# Start the web dashboard
-python -m homelab.dashboard.app
+## API Endpoints
 
-# Visit http://localhost:8050
+#### Example: Local routes, port 3000 
+```bash
+# Start api (runs in background). Can also use systemd
+homelab-api
+```
+
+```/api/containers```
+```bash
+# List containers
+curl http://localhost:3000/api/containers
+
+# Get container details
+curl http://localhost:3000/api/containers/<container>
+
+# Get usage stats
+curl http://localhost:3000/api/containers/<container>/stats
+curl http://localhost:3000/api/containers/stats/all
+
+# Start/stop/restart container
+curl -X POST http://localhost:3000/api/containers/<container>/start
+curl -X POST http://localhost:3000/api/containers/<container>/stop
+curl -X POST http://localhost:3000/api/containers/<container>/restart
+
+# Get container logs
+curl http://localhost:3000/api/containers/<container>/logs?tail=50
+
+# Create snapshot
+curl -X POST http://localhost:3000/api/containers/<container>/snapshot
+
+# Get history
+curl http://localhost:3000/api/containers/<container>/history
+
+# Rollback
+curl -X POST http://localhost:3000/api/containers/<container>/rollback \
+  -H "Content-Type: application/json" \
+  -d '{"snapshot_id": 5}'
+
+# Change major version tag
+curl -X POST http://localhost:3000/api/containers/<container>/version-tag \
+  -H "Content-Type: application/json" \
+  -d '{"tag": "v2"}'
+
+# Check health
+curl http://localhost:3000/api/containers/<container>/health
+```
+
+```/api/updates```
+```bash
+# Check for update
+curl http://localhost:3000/api/updates/<container>/check
+
+# Perform an update
+curl -X POST http://localhost:3000/api/updates/<container>/update
+
+# Get auto-update config
+curl http://localhost:3000/api/updates/<container>/auto-update
+
+# Configure auto-update
+curl -X POST http://localhost:3000/api/updates/<container>/auto-update
+```
+
+```/api/snapshots```
+```bash
+# List snapshots
+curl http://localhost:3000/api/snapshots
+
+# Get a snapshot
+curl http://localhost:3000/api/snapshots/<snapshot_id>
+
+# Delete a snapshot
+curl -X DELETE http://localhost:3000/api/snapshots/<snapshot_id>
 ```
 
 ## Appendix
@@ -132,7 +267,7 @@ python -m homelab.dashboard.app
 
 <br>
 
-### [01] Automated Version Control vs Planned Changes
+### > Automated Version Control vs Planned Changes
 **Version Control** - Snapshot, update, and rollback the container state:
 - Alters the underlying image digest (hash of v2.117.0)
 - Stays on the same major version (v2 → v2 new digest)
@@ -145,7 +280,7 @@ python -m homelab.dashboard.app
 - Alters version control to track (v3 → v3 new digest)
 
 
-### [02] Docker Compose Integration
+### > Docker Compose Integration
 
 Homelab Manager can optionally keep your docker-compose `.env` files in sync with major changes.
 
@@ -191,7 +326,7 @@ homelab verify-compose immich-server
 - You can run `docker-compose up` without major version conflicts
 
 
-### [03] PostgreSQL Management
+### > PostgreSQL Management
 
 In addition to commands like `history` or `verify-compose`, you can optionally manually interact with the database
 ```bash
