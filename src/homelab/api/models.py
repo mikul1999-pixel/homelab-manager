@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Request models
 class SnapshotRequest(BaseModel):
@@ -69,6 +69,14 @@ class RollbackResponse(BaseModel):
     compose_synced: bool
     message: str
 
+class VersionTagResponse(BaseModel):
+    success: bool
+    container: str
+    old_tag: str
+    old_tag: str
+    compose_synced: bool
+    message: str
+
 class UpdateResponse(BaseModel):
     success: bool
     container: str
@@ -92,6 +100,42 @@ class HealthCheckResponse(BaseModel):
     port_check: Optional[bool]
     overall_healthy: bool
     timestamp: datetime
+
+class MemoryStats(BaseModel):
+    usage: int
+    limit: int
+    percent: float
+    usage_mb: float
+    limit_mb: float
+
+
+class NetworkStats(BaseModel):
+    rx_bytes: int
+    tx_bytes: int
+    rx_mb: float
+    tx_mb: float
+
+
+class BlockIOStats(BaseModel):
+    read_bytes: int
+    write_bytes: int
+    read_mb: float
+    write_mb: float
+
+
+class StatsResponse(BaseModel):
+    model_config = ConfigDict(
+        json_encoders={
+            datetime: lambda v: v.isoformat() + 'Z' if v else None
+        }
+    )
+    
+    container: str
+    cpu_percent: float
+    memory: MemoryStats
+    network: NetworkStats
+    block_io: BlockIOStats
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class ErrorResponse(BaseModel):
     error: str

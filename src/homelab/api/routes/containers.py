@@ -14,7 +14,9 @@ from homelab.api.models import (
     SnapshotInfo,
     RollbackRequest,
     RollbackResponse,
-    VersionTagRequest
+    VersionTagRequest,
+    VersionTagResponse,
+    StatsResponse
 )
 from homelab.core.docker_manager import DockerManager
 from homelab.core.version_tracker import VersionTracker
@@ -110,7 +112,7 @@ def rollback_container(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Rollback failed: {str(e)}")
 
-@router.post("/{container_name}/version-tag")
+@router.post("/{container_name}/version-tag", response_model=VersionTagResponse)
 def change_version_tag(
     container_name: str,
     request: VersionTagRequest,
@@ -132,9 +134,9 @@ def change_version_tag(
         raise HTTPException(status_code=500, detail=f"Failed to change version tag: {str(e)}")
 
 
-#--------- endpoints specific to TUI/UI ---------#
+#--------- endpoints specific to TUI ---------#
 
-@router.get("/{container_name}/stats")
+@router.get("/{container_name}/stats", response_model=StatsResponse)
 def get_container_stats(
     container_name: str = Depends(verify_container_exists),
     stats: StatsManager = Depends(get_stats_manager)
