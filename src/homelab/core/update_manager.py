@@ -1,7 +1,4 @@
-from typing import Dict, List, Optional
-from datetime import datetime
-import docker
-from homelab.core.models import VersionHistory, ImageTag
+from homelab.core.models import VersionHistory
 from homelab.core.docker_manager import DockerManager
 from homelab.core.version_tracker import VersionTracker
 from homelab.core.update_checker import UpdateChecker
@@ -15,7 +12,7 @@ class UpdateManager:
         self.checker = UpdateChecker(session)
         self.docker_manager = DockerManager()
 
-    def update_container(self, container_name: str, on_event=None) -> Optional[Dict]:
+    def update_container(self, container_name: str, on_event=None) -> dict | None:
         """Execute an image update if available"""
 
         def emit(msg):

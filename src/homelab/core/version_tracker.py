@@ -1,5 +1,3 @@
-from datetime import datetime
-from typing import List, Dict, Optional
 from pathlib import Path
 from homelab.core.models import VersionHistory, ComposeConfig, ImageTag
 from homelab.core.docker_manager import DockerManager
@@ -39,7 +37,7 @@ class VersionTracker:
         return snapshot
 
 
-    def _init_tag_tracking(self, container_name: str, details: Dict) -> ImageTag:
+    def _init_tag_tracking(self, container_name: str, details: dict) -> ImageTag:
         """Initialize tag tracking for a container"""
         
         # Get image from Docker container config (original creation image)
@@ -100,14 +98,14 @@ class VersionTracker:
         return 'custom'
 
 
-    def get_version_info(self, container_name: str) -> Optional[ImageTag]:
+    def get_version_info(self, container_name: str) -> ImageTag | None:
         """Get stored image tag info for a container"""
         return self.session.query(ImageTag)\
             .filter_by(container_name=container_name)\
             .first()
 
 
-    def get_version_name(self, container_name: str) -> Optional[str]:
+    def get_version_name(self, container_name: str) -> str | None:
         """Get the canonical image name (repo:tag) for a container"""
         tag_info = self.get_version_info(container_name)
         if not tag_info:
@@ -121,7 +119,7 @@ class VersionTracker:
             return image.split(':')[-1]
         return 'latest'
 
-    def add_version_tag(self, container_name: str, tag: str, on_event=None) -> Optional[Dict]:
+    def add_version_tag(self, container_name: str, tag: str, on_event=None) -> dict | None:
         """Change major version tag for a container"""
 
         def emit(msg):
@@ -175,26 +173,26 @@ class VersionTracker:
             'compose_config': compose_config
         }
 
-    def get_history(self, container_name: str) -> List[VersionHistory]:
+    def get_history(self, container_name: str) -> list[VersionHistory]:
         """Get version history for a container"""
         return self.session.query(VersionHistory)\
             .filter_by(container_name=container_name)\
             .order_by(VersionHistory.timestamp.desc())\
             .all()
 
-    def get_snapshot_by_id(self, snapshot_id: int) -> Optional[VersionHistory]:
+    def get_snapshot_by_id(self, snapshot_id: int) -> VersionHistory | None:
         """Get a specific snapshot by ID"""
         return self.session.query(VersionHistory)\
             .filter_by(id=snapshot_id)\
             .first()
 
-    def get_compose_config(self, container_name: str) -> Optional[ComposeConfig]:
+    def get_compose_config(self, container_name: str) -> ComposeConfig | None:
         """Get compose configuration for a container"""
         return self.session.query(ComposeConfig)\
             .filter_by(container_name=container_name, enabled=True)\
             .first()
     
-    def rollback_container(self, container_name: str, snapshot_id: int) -> Dict:
+    def rollback_container(self, container_name: str, snapshot_id: int) -> dict:
         """Rollback container to a specific snapshot"""
         # Get the target snapshot
         snapshot = self.get_snapshot_by_id(snapshot_id)

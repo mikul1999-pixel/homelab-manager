@@ -1,5 +1,4 @@
 import docker
-from typing import List, Dict, Optional
 from dataclasses import dataclass
 
 @dataclass
@@ -17,7 +16,7 @@ class DockerManager:
     def __init__(self):
         self.client = docker.from_env()
     
-    def list_containers(self, all: bool = True) -> List[ContainerInfo]:
+    def list_containers(self, all: bool = True) -> list[ContainerInfo]:
         """List all containers"""
         containers = self.client.containers.list(all=all)
         return [
@@ -31,7 +30,7 @@ class DockerManager:
             for c in containers
         ]
     
-    def get_container_details(self, name: str) -> Dict:
+    def get_container_details(self, name: str) -> dict:
         """Get detailed container information"""
         container = self.client.containers.get(name)
         
@@ -93,7 +92,7 @@ class DockerManager:
         self, 
         name: str, 
         tail: int = 100, 
-        since: Optional[str] = None,
+        since: str | None = None,
         timestamps: bool = True
     ) -> str:
         """Get logs from a container"""
@@ -115,7 +114,7 @@ class DockerManager:
         
         return logs
     
-    def recreate_container(self, name: str, image: str, config: Dict, image_digest: Optional[str] = None) -> None:
+    def recreate_container(self, name: str, image: str, config: dict, image_digest: str | None = None) -> None:
         """Recreate a container with specific image and config (core rollback mechanism)"""
 
         try:
@@ -152,7 +151,7 @@ class DockerManager:
         
         return new_container
     
-    def _parse_volumes(self, mounts: List[Dict]) -> Dict[str, Dict]:
+    def _parse_volumes(self, mounts: list[dict]) -> dict[str, dict]:
         """Parse Docker volume mounts into format for containers.run()"""
         volumes = {}
         for mount in mounts:
@@ -168,7 +167,7 @@ class DockerManager:
                 }
         return volumes
     
-    def _parse_ports(self, ports: Dict) -> Dict:
+    def _parse_ports(self, ports: dict) -> dict:
         """Parse Docker port mappings into format for containers.run()"""
         parsed_ports = {}
         for container_port, host_bindings in ports.items():

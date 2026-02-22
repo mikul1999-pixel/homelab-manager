@@ -1,8 +1,5 @@
-from typing import Dict, List, Optional
 from datetime import datetime
 import docker
-from homelab.core.models import VersionHistory, ImageTag
-from homelab.core.docker_manager import DockerManager
 from homelab.core.version_tracker import VersionTracker
 
 class UpdateChecker:
@@ -13,7 +10,7 @@ class UpdateChecker:
         self.session = session
         self.tracker = VersionTracker(session)
 
-    def get_current_image(self, container_name: str) -> Optional[Dict]:
+    def get_current_image(self, container_name: str) -> dict | None:
         """Pull the current image info for a container""" 
         try:
             container = self.client.containers.get(container_name)
@@ -41,7 +38,7 @@ class UpdateChecker:
             'version_reference': current_digest or current_image_id
         }
     
-    def check_for_update(self, container_name: str, on_event=None) -> Optional[Dict]:
+    def check_for_update(self, container_name: str, on_event=None) -> dict | None:
         """Check if a newer version of the container's image is available"""
         def emit(msg):
             if on_event:
@@ -96,7 +93,7 @@ class UpdateChecker:
         emit(f"{container_name} is up to date")
         return None
     
-    def _get_digest(self, image) -> Optional[str]:
+    def _get_digest(self, image) -> str | None:
         """Get digest from image"""
         # Try RepoDigests
         if image.attrs.get('RepoDigests'):

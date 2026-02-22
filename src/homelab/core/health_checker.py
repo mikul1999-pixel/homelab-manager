@@ -1,4 +1,3 @@
-from typing import Dict, List, Optional
 import docker
 
 class HealthChecker:
@@ -7,7 +6,7 @@ class HealthChecker:
     def __init__(self):
         self.client = docker.from_env()
     
-    def check_container_health(self, container_name: str) -> Dict:
+    def check_container_health(self, container_name: str) -> dict:
         """Check container health using all available methods"""
         results = {
             'container_running': False,
@@ -48,7 +47,7 @@ class HealthChecker:
         
         return results
     
-    def _evaluate_health(self, results: Dict) -> bool:
+    def _evaluate_health(self, results: dict) -> bool:
         """Determine if container is healthy based on available checks"""
         # Docker health
         if results['docker_health'] == 'healthy':
@@ -63,7 +62,7 @@ class HealthChecker:
         # Fallback: assume healthy if running
         return results['container_running']
     
-    def _get_exposed_ports(self, container_name: str) -> List[int]:
+    def _get_exposed_ports(self, container_name: str) -> list[int]:
         """Get list of host ports from container attrs"""
         container = self.client.containers.get(container_name)
         ports = container.attrs['NetworkSettings']['Ports']
@@ -79,7 +78,7 @@ class HealthChecker:
 
         return host_ports
     
-    def _get_env_ports(self, container_name: str) -> List[int]:
+    def _get_env_ports(self, container_name: str) -> list[int]:
         """Get list of host ports from container env vars (backup method)"""
 
         container = self.client.containers.get(container_name)

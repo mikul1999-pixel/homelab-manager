@@ -1,4 +1,3 @@
-from typing import Dict, List, Optional
 import docker
 from datetime import datetime
 
@@ -8,14 +7,14 @@ class StatsManager:
     def __init__(self):
         self.client = docker.from_env()
     
-    def get_container_stats(self, container_name: str) -> Dict:
+    def get_container_stats(self, container_name: str) -> dict:
         """Get resource usage stats for a single container"""
         container = self.client.containers.get(container_name)
         raw_stats = container.stats(stream=False)
         
         return self._parse_stats(container.name, raw_stats)
     
-    def get_all_container_stats(self) -> List[Dict]:
+    def get_all_container_stats(self) -> list[dict]:
         """Get stats for all running containers"""
         containers = self.client.containers.list()
         stats_list = []
@@ -35,7 +34,7 @@ class StatsManager:
         
         return stats_list
     
-    def _parse_stats(self, container_name: str, stats: Dict) -> Dict:
+    def _parse_stats(self, container_name: str, stats: dict) -> dict:
         """Parse Docker stats into clean format"""
         # CPU Usage
         cpu_percent = self._calculate_cpu_percent(stats)
@@ -76,7 +75,7 @@ class StatsManager:
             "timestamp": datetime.utcnow()
         }
     
-    def _calculate_cpu_percent(self, stats: Dict) -> float:
+    def _calculate_cpu_percent(self, stats: dict) -> float:
         """Calculate CPU usage percentage"""
         cpu_stats = stats.get('cpu_stats', {})
         precpu_stats = stats.get('precpu_stats', {})
@@ -95,7 +94,7 @@ class StatsManager:
         
         return 0.0
     
-    def _calculate_network_io(self, stats: Dict) -> tuple:
+    def _calculate_network_io(self, stats: dict) -> tuple:
         """Calculate network RX/TX bytes"""
         networks = stats.get('networks', {})
         
@@ -104,7 +103,7 @@ class StatsManager:
         
         return rx_bytes, tx_bytes
     
-    def _calculate_block_io(self, stats: Dict) -> tuple:
+    def _calculate_block_io(self, stats: dict) -> tuple:
         """Calculate disk read/write bytes"""
         blkio_stats = stats.get('blkio_stats', {})
         io_service_bytes = blkio_stats.get('io_service_bytes_recursive', [])

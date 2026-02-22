@@ -1058,7 +1058,7 @@ def scheduler():
 
 @cli.command()
 @click.option("--follow", "-f", is_flag=True, help="Stream logs in real time")
-def logs(follow):
+def update_logs(follow):
     """Read Homelab Manager logs"""
     import time
     from homelab.logging_config import os, get_default_log_path

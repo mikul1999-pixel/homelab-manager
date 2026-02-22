@@ -1,6 +1,4 @@
-import re
 from pathlib import Path
-from typing import Dict, Optional, List
 from datetime import datetime
 
 class ComposeManager:
@@ -9,7 +7,7 @@ class ComposeManager:
     def __init__(self):
         pass
     
-    def read_env_file(self, env_path: Path) -> Dict[str, str]:
+    def read_env_file(self, env_path: Path) -> dict[str, str]:
         """Read .env file into dictionary"""
         env_vars = {}
         
@@ -27,8 +25,8 @@ class ComposeManager:
         
         return env_vars
     
-    def write_env_file(self, env_path: Path, env_vars: Dict[str, str], 
-                       header_comment: Optional[str] = None):
+    def write_env_file(self, env_path: Path, env_vars: dict[str, str], 
+                       header_comment: str | None = None):
         """Write dictionary to .env file"""
         # Ensure directory exists
         env_path.parent.mkdir(parents=True, exist_ok=True)
@@ -51,7 +49,7 @@ class ComposeManager:
         env_vars[var_name] = var_value
         self.write_env_file(env_path, env_vars)
     
-    def guess_version_variable(self, container_name: str, service_name: Optional[str] = None) -> str:
+    def guess_version_variable(self, container_name: str, service_name: str | None = None) -> str:
         """Default environment variable name from container name"""
         name = service_name or container_name
         
@@ -70,7 +68,7 @@ class ComposeManager:
         # Convert to uppercase and add _VERSION
         return f"{base_name.upper()}_VERSION"
     
-    def parse_compose_files_from_label(self, label_value: str) -> List[str]:
+    def parse_compose_files_from_label(self, label_value: str) -> list[str]:
         """Parse compose files from Docker label"""
         if not label_value:
             return []
@@ -79,7 +77,7 @@ class ComposeManager:
         # Get just the filenames
         return [Path(f).name for f in files]
     
-    def find_compose_directory(self, label_value: str) -> Optional[Path]:
+    def find_compose_directory(self, label_value: str) -> Path | None:
         """Extract compose directory from Docker label"""
         if not label_value:
             return None

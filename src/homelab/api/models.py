@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, List, Dict, Any
+from typing import Any
 from datetime import datetime, timezone
 
 # Request models
@@ -36,21 +36,21 @@ class ContainerInfo(BaseModel):
 class ContainerDetail(BaseModel):
     name: str
     image: str
-    image_digest: Optional[str]
-    image_id: Optional[str]
+    image_digest: str | None
+    image_id: str | None
     status: str
-    env_vars: List[str]
-    ports: Dict[str, Any]
-    networks: List[str]
-    restart_policy: Dict[str, Any]
-    compose_project: Optional[str]
-    current_tag: Optional[str]
+    env_vars: list[str]
+    ports: dict[str, Any]
+    networks: list[str]
+    restart_policy: dict[str, Any]
+    compose_project: str | None
+    current_tag: str | None
 
 class SnapshotInfo(BaseModel):
     id: int
     container_name: str
     image_version: str
-    image_digest: Optional[str]
+    image_digest: str | None
     timestamp: datetime
     action: str
     
@@ -59,7 +59,7 @@ class SnapshotInfo(BaseModel):
 
 class VersionHistoryResponse(BaseModel):
     container: str
-    history: List[SnapshotInfo]
+    history: list[SnapshotInfo]
 
 class RollbackResponse(BaseModel):
     success: bool
@@ -96,8 +96,8 @@ class UpdateCheckResponse(BaseModel):
 class HealthCheckResponse(BaseModel):
     container: str
     container_running: bool
-    docker_health: Optional[str]
-    port_check: Optional[bool]
+    docker_health: str | None
+    port_check: bool | None
     overall_healthy: bool
     timestamp: datetime
 
@@ -139,4 +139,4 @@ class StatsResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: str
-    detail: Optional[str] = None
+    detail: str | None = None
