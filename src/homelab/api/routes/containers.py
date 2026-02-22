@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import List, Optional
+from datetime import datetime
 from homelab.api.dependencies import (
     get_docker_manager,
     get_version_tracker,
@@ -24,7 +24,7 @@ from homelab.core.stats_manager import StatsManager
 
 router = APIRouter()
 
-@router.get("", response_model=List[ContainerInfo])
+@router.get("", response_model=list[ContainerInfo])
 def list_containers(
     all: bool = Query(True, description="Include stopped containers"),
     docker: DockerManager = Depends(get_docker_manager)
@@ -212,7 +212,7 @@ def restart_container(
 def get_container_logs(
     container_name: str = Depends(verify_container_exists),
     tail: int = Query(100, ge=1, le=1000, description="Number of lines"),
-    since: Optional[str] = Query(None, description="Show logs since timestamp"),
+    since: str | None = Query(None, description="Show logs since timestamp"),
     docker: DockerManager = Depends(get_docker_manager)
 ):
     """Get container logs"""

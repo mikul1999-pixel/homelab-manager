@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException
-from typing import List
 from homelab.api.dependencies import (
     get_db,
     verify_container_exists

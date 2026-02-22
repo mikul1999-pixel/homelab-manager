@@ -1,12 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import List
 from homelab.api.dependencies import get_version_tracker
 from homelab.api.models import SnapshotInfo
 from homelab.core.version_tracker import VersionTracker
 
 router = APIRouter()
 
-@router.get("", response_model=List[SnapshotInfo])
+@router.get("", response_model=list[SnapshotInfo])
 def list_snapshots(
     limit: int = Query(100, ge=1, le=1000, description="Max snapshots to return"),
     tracker: VersionTracker = Depends(get_version_tracker)

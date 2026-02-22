@@ -9,8 +9,6 @@ def cli():
 @cli.command()
 def init():
     """Initialize Homelab Manager and show setup instructions."""
-    import pathlib
-    import os
 
     SYSTEMD_UNIT_PATH = "homelab-manager/src/homelab/scheduler/homelab-scheduler.service"
 
@@ -138,7 +136,6 @@ def restart(container_name, timeout):
 def logs(container_name, tail, follow, since):
     """Show container logs"""
     from homelab.core.docker_manager import DockerManager
-    import docker
     
     docker_mgr = DockerManager()
     
@@ -773,14 +770,12 @@ def list_compose():
 def check_update(container_name):
     """Check if a newer version of the container image is available"""
     from homelab.core.update_checker import UpdateChecker
-    from homelab.core.update_manager import UpdateManager
     from homelab.core.models import init_db
     from homelab.config import DATABASE_URL
     
     Session = init_db(DATABASE_URL)
     session = Session()
     checker = UpdateChecker(session)
-    updater = UpdateManager(session)
     
     click.echo(f"Checking for updates to {container_name}...")
     
@@ -802,14 +797,11 @@ def update(container_name, force):
     """Update container to latest image version"""
     from homelab.core.update_checker import UpdateChecker
     from homelab.core.update_manager import UpdateManager
-    from homelab.core.models import init_db, VersionHistory
-    from homelab.core.version_tracker import VersionTracker
+    from homelab.core.models import init_db
     from homelab.config import DATABASE_URL
-    from pathlib import Path
     
     Session = init_db(DATABASE_URL)
     session = Session()
-    tracker = VersionTracker(session)
     checker = UpdateChecker(session)
     updater = UpdateManager(session)
     
@@ -976,12 +968,14 @@ def test(container_name, force):
     """Test update process (dry-run with health check)"""
     from homelab.config import DATABASE_URL
     from homelab.core.models import init_db, AutoUpdateConfig
-    from homelab.scheduler.jobs import check_updates_job
+    from homelab.scheduler.jobs import apply_update_with_monitoring
     from homelab.core.version_tracker import VersionTracker
+    from homelab.core.update_manager import UpdateManager
 
     Session = init_db(DATABASE_URL)
     session = Session()
     tracker = VersionTracker(session)
+    updater = UpdateManager(session)
     
     click.echo(f"Testing auto-update for {container_name}...\n")
 
@@ -1005,6 +999,7 @@ def test(container_name, force):
         success = apply_update_with_monitoring(
             container_name = container_name,
             tracker = tracker,
+            updater = updater,
             health_check_duration = 600,
             auto_rollback = True
         ) 

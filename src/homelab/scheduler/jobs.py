@@ -1,8 +1,8 @@
 import logging
 import time
 from datetime import datetime
-from typing import Dict, Optional
 from homelab.core.models import init_db, AutoUpdateConfig
+from homelab.core.update_manager import UpdateManager
 from homelab.core.update_checker import UpdateChecker
 from homelab.core.version_tracker import VersionTracker
 from homelab.core.health_checker import HealthChecker
@@ -69,6 +69,7 @@ def check_updates_job(database_url: str):
 def apply_update_with_monitoring(
     container_name: str,
     tracker: VersionTracker,
+    updater: UpdateManager,
     health_check_duration: int = 600,
     auto_rollback: bool = True
 ) -> bool:
@@ -85,8 +86,8 @@ def apply_update_with_monitoring(
 
     if not update_result.get("updated"):
         logger.error(f" Update failed: {update_result.get('reason')}")
-        if "error" in result:
-            logger.error(f"Error: {update_result['error']}")
+        if update_result.get('error') is not None:
+            logger.error(f"Error: {update_result.get('error')}")
             return False
 
     # Success summary
